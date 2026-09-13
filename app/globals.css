@@ -1,0 +1,340 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --font-sans: var(--font-noto-sans), ui-sans-serif, system-ui, 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  --font-serif: var(--font-noto-serif), ui-serif, 'Songti SC', 'SimSun', serif;
+}
+
+@theme {
+  /* 墨 —— 背景与面板 */
+  --color-ink-950: #070908;
+  --color-ink-900: #0d1110;
+  --color-ink-850: #131917;
+  --color-ink-800: #1a221f;
+  --color-ink-700: #253029;
+  --color-ink-600: #35423b;
+
+  /* 玉青 —— 主色 */
+  --color-jade-200: #bcefe3;
+  --color-jade-300: #8ad9c8;
+  --color-jade-400: #5cc0ad;
+  --color-jade-500: #3a9d8b;
+  --color-jade-600: #2a7a6c;
+  --color-jade-700: #1d5a50;
+  --color-jade-800: #123c36;
+
+  /* 暗金 —— 强调 */
+  --color-gold-200: #f6e6b8;
+  --color-gold-300: #e8c877;
+  --color-gold-400: #d0a94f;
+  --color-gold-500: #a8842f;
+  --color-gold-600: #7a5f22;
+
+  /* 宣纸 —— 文字层级 */
+  --color-cream: #f2ead8;
+  --color-cream-dim: #c8bfa8;
+  --color-cream-faint: #8b8471;
+
+  /* 朱砂 —— 危险 / 红点 */
+  --color-blood-400: #d24b3a;
+  --color-blood-500: #b03626;
+  --color-blood-600: #7d2418;
+
+  --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+  --animate-spin-slow: spin 22s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-glow: pulse-glow 2.4s ease-in-out infinite;
+  --animate-slash: slash 1.6s ease-in-out infinite;
+  --animate-float-up: float-up 1.1s ease-out both;
+}
+
+@keyframes float-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(0) scale(1.05);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-26px) scale(1);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes slash {
+  0% {
+    opacity: 0;
+    transform: translateX(-40px) scaleX(0.6);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(60px) scaleX(1.1);
+  }
+}
+
+/* 关卡过场：水墨扩散 / 印章落下 / 文字升起 */
+@keyframes stageInk {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes stageSeal {
+  from {
+    opacity: 0;
+    transform: rotate(-12deg) scale(1.5);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-12deg) scale(1);
+  }
+}
+
+@keyframes stageRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* 结算：印章盖落 / 卡片浮入 / 光晕呼吸 / 光柱溃散 */
+@keyframes sealStamp {
+  0% {
+    opacity: 0;
+    transform: rotate(-18deg) scale(2.1);
+  }
+  60% {
+    opacity: 1;
+    transform: rotate(-18deg) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-18deg) scale(1);
+  }
+}
+
+@keyframes lootRise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes lootGlow {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes beamFade {
+  0% {
+    opacity: 0.9;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(1.6);
+  }
+}
+
+:root {
+  color-scheme: dark;
+  --background: #070908;
+  --foreground: #f2ead8;
+  --card: #131917;
+  --card-foreground: #f2ead8;
+  --popover: #131917;
+  --popover-foreground: #f2ead8;
+  --primary: #e8c877;
+  --primary-foreground: #0d1110;
+  --secondary: #1a221f;
+  --secondary-foreground: #f2ead8;
+  --muted: #1a221f;
+  --muted-foreground: #8b8471;
+  --accent: #2a7a6c;
+  --accent-foreground: #f2ead8;
+  --destructive: #b03626;
+  --border: rgba(232, 200, 119, 0.18);
+  --input: rgba(232, 200, 119, 0.18);
+  --ring: #e8c877;
+  --radius: 0.5rem;
+  --sidebar: #0d1110;
+  --sidebar-foreground: #f2ead8;
+  --sidebar-primary: #e8c877;
+  --sidebar-primary-foreground: #0d1110;
+  --sidebar-accent: #1a221f;
+  --sidebar-accent-foreground: #f2ead8;
+  --sidebar-border: rgba(232, 200, 119, 0.18);
+  --sidebar-ring: #e8c877;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@utility text-glow-gold {
+  text-shadow:
+    0 0 14px rgba(232, 200, 119, 0.5),
+    0 0 2px rgba(232, 200, 119, 0.85);
+}
+
+@utility text-glow-jade {
+  text-shadow:
+    0 0 14px rgba(92, 192, 173, 0.5),
+    0 0 2px rgba(92, 192, 173, 0.85);
+}
+
+@utility text-glow-blood {
+  text-shadow:
+    0 0 14px rgba(210, 75, 58, 0.55),
+    0 0 2px rgba(210, 75, 58, 0.9);
+}
+
+/* 宣纸 / 木牌 / 石刻面板 */
+@utility panel-ink {
+  background:
+    linear-gradient(180deg, rgba(26, 34, 31, 0.94), rgba(9, 12, 11, 0.97));
+  border: 1px solid rgba(232, 200, 119, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(242, 234, 216, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+@utility panel-parchment {
+  background:
+    linear-gradient(180deg, rgba(242, 234, 216, 0.96), rgba(214, 202, 176, 0.92));
+  border: 1px solid rgba(122, 95, 34, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+@utility gold-hairline {
+  border: 1px solid rgba(232, 200, 119, 0.35);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility ink-vignette {
+  background: radial-gradient(
+    120% 80% at 50% 0%,
+    transparent 30%,
+    rgba(7, 9, 8, 0.55) 78%,
+    rgba(7, 9, 8, 0.92) 100%
+  );
+}
