@@ -915,6 +915,19 @@ section('9. B9 / B10 素材契约（立绘与背景真实落盘）')
 
 {
   const pub = join(process.cwd(), 'public')
+  /** B11 音效契约（甲方 F12 接入时按此文件名取用） */
+  const AUDIO_KEYS = [
+    'sword',
+    'thunder',
+    'fire',
+    'boss-roar',
+    'drop-red',
+    'breakthrough',
+    'alchemy',
+    'forge',
+    'ui-click',
+    'story-choice',
+  ]
   const missingBg = MAPS.filter((m) => !existsSync(join(pub, m.bg)))
   ok(
     '4 张地图背景均存在',
@@ -929,12 +942,27 @@ section('9. B9 / B10 素材契约（立绘与背景真实落盘）')
     `缺 ${missingNpc.length}：${missingNpc.map((n) => n.portrait).join(' ')}`,
   )
 
-  const moodFiles = NPCS.reduce((n, npc) => {
-    const dir = join(pub, 'images', 'npc')
-    const stem = npc.portrait.replace('/images/npc/', '').replace('.png', '')
-    return n + ['hurt', 'angry', 'happy', 'cold'].filter((m) => existsSync(join(dir, `${stem}-${m}.png`))).length
-  }, 0)
-  console.log(`     五态立绘：已备 ${moodFiles} / ${NPCS.length * 4} 张（缺的走 <id>.png 兜底）`)
+  const missingAudio = AUDIO_KEYS.filter((n) => !existsSync(join(pub, 'audio', `${n}.wav`)))
+  ok(
+    '核心音效素材已落盘',
+    missingAudio.length <= 2,
+    missingAudio.length ? `缺 ${missingAudio.join(' ')}` : '',
+  )
+
+  // 情绪变体按 npcs.ts 实际引用统计（normal 是兜底底图，不计入变体口径）
+  const moodPaths = NPCS.flatMap((n) =>
+    Object.entries(n.moods ?? {})
+      .filter(([mood]) => mood !== 'normal')
+      .map(([, p]) => p),
+  )
+  const missingMood = moodPaths.filter((p) => !existsSync(join(pub, p)))
+  console.log(
+    `     情绪变体：${moodPaths.length - missingMood.length} / ${moodPaths.length} 张已备（缺的走 normal 兜底，不阻塞）`,
+  )
+  ok(
+    '每个 NPC 的 normal 立绘都可解析（兜底链成立）',
+    NPCS.every((n) => existsSync(join(pub, n.portrait))),
+  )
 }
 
 /* ------------------------------ 汇总 ------------------------------ */
