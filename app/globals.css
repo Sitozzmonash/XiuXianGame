@@ -241,6 +241,26 @@
   }
 }
 
+/* 高品质掉落时的轻震（PRD 19 章：红装带轻震） */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
 :root {
   color-scheme: dark;
   --background: #070908;

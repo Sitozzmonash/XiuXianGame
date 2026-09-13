@@ -294,7 +294,9 @@ function DropCard({ drop, shown }: { drop: BattleDropView; shown: boolean }) {
         className="relative flex size-9 items-center justify-center rounded-sm"
         style={{ background: 'rgba(7,9,8,0.7)', boxShadow: `inset 0 0 0 1px ${q.ring}` }}
       >
-        <GameIcon name={drop.icon} className="size-4.5" style={{ color: q.text }} />
+        <span style={{ color: q.text }}>
+          <GameIcon name={drop.icon} className="size-4" />
+        </span>
       </span>
 
       <span

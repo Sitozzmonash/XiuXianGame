@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { BottomTab, ModalKind, Screen } from '@/lib/navigation'
 import type { Treasure } from '@/lib/game-data'
+import type { GameSave } from '@/lib/game/types'
 import { BottomNavigation } from './BottomNavigation'
 import { LoginScreen } from './screens/LoginScreen'
 import { MainScreen } from './screens/MainScreen'
@@ -20,6 +21,7 @@ import { EquipmentModal } from './modals/EquipmentModal'
 import { TreasureModal } from './modals/TreasureModal'
 import { IdleModal } from './modals/IdleModal'
 import { BossFailModal } from './modals/BossFailModal'
+import { createDemoSave } from './demoSave'
 
 const SCREEN_TAB: Partial<Record<Screen, BottomTab>> = {
   cave: 'cave',
@@ -36,6 +38,17 @@ export function GameShell() {
   const [modal, setModal] = useState<ModalKind>(null)
   const [treasure, setTreasure] = useState<Treasure | null>(null)
   const [equipName, setEquipName] = useState<string | undefined>(undefined)
+  const [stage, setStage] = useState(1)
+
+  /* 存档快照：状态层（lib/game/state）落地前先用演示存档。
+     战斗期间使用冻结快照，避免战斗过程中的存档变化打断战斗。 */
+  const [save, setSave] = useState<GameSave>(() => createDemoSave())
+  const [battleSave, setBattleSave] = useState<GameSave>(() =>
+    createDemoSave(),
+  )
+  const [battleRun, setBattleRun] = useState(0)
+  const saveRef = useRef(save)
+  saveRef.current = save
 
   const openTreasure = useCallback((t: Treasure) => {
     setTreasure(t)
@@ -49,6 +62,78 @@ export function GameShell() {
 
   const closeModal = useCallback(() => setModal(null), [])
 
+  /** 以当前存档与关卡开一场新战斗 */
+  const beginBattle = useCallback(() => {
+    const snapshot: GameSave = {
+      ...saveRef.current,
+      progress: {
+        ...saveRef.current.progress,
+        stage,
+        mapStage: ((stage - 1) % 50) + 1,
+      },
+    }
+    setBattleSave(snapshot)
+    setBattleRun((v) => v + 1)
+    setScreen('battle')
+  }, [stage])
+
+  /** 胜利：结算掉落与进度，停在结算画面等玩家选择 */
+  const handleBattleWin = useCallback(
+    ({ damage }: { drops: unknown[]; damage: number; dps: number }) => {
+      setSave((prev) => {
+        const nextStage = prev.progress.stage + 1
+        return {
+          ...prev,
+          updatedAt: Date.now(),
+          progress: {
+            ...prev.progress,
+            stage: nextStage,
+            mapStage: ((nextStage - 1) % 50) + 1,
+            maxStage: Math.max(prev.progress.maxStage, prev.progress.stage),
+            stableStage: Math.max(prev.progress.stableStage, prev.progress.stage - 3),
+          },
+          stats: {
+            ...prev.stats,
+            kills: prev.stats.kills + 1,
+            playTime: prev.stats.playTime + Math.round(damage / 1000),
+          },
+        }
+      })
+    },
+    [],
+  )
+
+  const handleBattleLose = useCallback(({ failReason }: { failReason?: string }) => {
+    setSave((prev) => ({ ...prev, stats: { ...prev.stats, deaths: prev.stats.deaths + 1 } }))
+    if (failReason) {
+      setSave((prev) => ({
+        ...prev,
+        log: [
+          {
+            id: `lose_${Date.now()}`,
+            time: Date.now(),
+            text: failReason,
+            kind: 'battle' as const,
+          },
+          ...prev.log.slice(0, 49),
+        ],
+      }))
+    }
+  }, [])
+
+  /** 继续推关：推进关卡并重开一场战斗 */
+  const handleNextStage = useCallback(() => {
+    setStage((v) => {
+      const next = v + 1
+      setBattleSave({
+        ...saveRef.current,
+        progress: { ...saveRef.current.progress, stage: next, mapStage: ((next - 1) % 50) + 1 },
+      })
+      return next
+    })
+    setBattleRun((v) => v + 1)
+  }, [])
+
   const showNav = !NAV_SCREENS.includes(screen)
   const activeTab = SCREEN_TAB[screen] ?? 'cave'
 
@@ -60,7 +145,7 @@ export function GameShell() {
         return (
           <MainScreen
             onNavigate={setScreen}
-            onBattle={() => setScreen('battle')}
+            onBattle={beginBattle}
             onOpenProfile={() => setScreen('character')}
             onOpenSettings={() => setModal('idle')}
             onAdd={() => setModal('idle')}
@@ -69,10 +154,15 @@ export function GameShell() {
       case 'battle':
         return (
           <BattleScreen
+            key={battleRun}
+            save={battleSave}
+            stage={stage}
             onBack={() => setScreen('home')}
+            onBattleWin={handleBattleWin}
+            onBattleLose={handleBattleLose}
+            onNextStage={handleNextStage}
             onOpenTreasure={openTreasure}
-            onOpenIdle={() => setModal('idle')}
-            onOpenBossFail={() => setModal('bossFail')}
+            onExit={() => setScreen('home')}
           />
         )
       case 'inventory':
