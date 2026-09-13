@@ -332,6 +332,19 @@ export function rollDrops(
   return drops
 }
 
+/**
+ * 关卡基础收益（单关全额）。
+ * 第 1 关约 25 灵石 / 40 修为，第 200 关约 3100 / 5200，温和幂函数
+ * （次线性放大，避免后期数值失控）。挂机结算按「单关收益 / 20 秒」折算每秒口径。
+ */
+export function stageReward(globalStage: number): { stone: number; cultivation: number } {
+  const s = Math.max(1, Math.floor(globalStage))
+  return {
+    stone: Math.round(25 * Math.pow(s, 0.91)),
+    cultivation: Math.round(40 * Math.pow(s, 0.92)),
+  }
+}
+
 function rollDropQuality(globalStage: number, kind: string, rng: Rng, rareBonus: number): Quality {
   const tier = globalStage / 200
   const boss = kind === 'boss'
@@ -583,12 +596,102 @@ export function findStableStage(save: GameSave, fromStage: number): number {
   return best
 }
 
+/* ------------------------------ 扫荡 ------------------------------ */
+
+export interface SweepResult {
+  ok: true
+  stage: number
+  times: number
+  /** 各次模拟耗时之和（秒） */
+  duration: number
+  win: boolean
+  wins: number
+  stone: number
+  cultivation: number
+  drops: Drop[]
+  sims: SimResult[]
+}
+
+export interface SweepBlocked {
+  ok: false
+  reason: string
+}
+
+const SWEEP_MIN_TIMES = 1
+const SWEEP_MAX_TIMES = 20
+
+/**
+ * 扫荡（PRD 46 章）：已通关关卡直接模拟结算，不渲染战斗。
+ * - 仅 globalStage ≤ progress.maxStage 的关卡可扫荡；
+ * - 该关挂着 storyId 且尚未看过时禁止（剧情首次禁止跳过）；
+ * - times 夹取 1~20，逐次 simulate，只有胜利的次数计入收益与掉落；
+ * - 全败时返回 ok:true / wins:0 / 收益为 0，由 UI 提示「战力不足」。
+ * 返回的 drops 是未实例化的原始掉落，交给 loot.materializeDrops；
+ * 保底（applyPity）由调用方在物化前执行，本函数不做保底，避免绕过结算流。
+ */
+export function sweep(
+  save: GameSave,
+  globalStage: number,
+  times = 10,
+  opts: SimOptions = {},
+): SweepResult | SweepBlocked {
+  const stage = Math.max(1, Math.floor(globalStage))
+  if (stage > save.progress.maxStage) {
+    return { ok: false, reason: `第 ${stage} 关尚未通关，无法扫荡` }
+  }
+  const { stage: stageDef } = getStage(stage)
+  if (stageDef.storyId && !save.story.seenNodes.includes(stageDef.storyId)) {
+    return { ok: false, reason: '该关包含首次剧情，请先亲手通过剧情' }
+  }
+
+  const runs = Math.min(SWEEP_MAX_TIMES, Math.max(SWEEP_MIN_TIMES, Math.floor(times) || 1))
+  const baseSeed = (opts.seed ?? hashStage(stage)) >>> 0
+  const p = playerCombatant(save)
+  const reward = stageReward(stage)
+  const rng = makeRng((baseSeed ^ 0x85ebca6b) >>> 0)
+
+  const sims: SimResult[] = []
+  const drops: Drop[] = []
+  let wins = 0
+  let duration = 0
+
+  for (let i = 0; i < runs; i++) {
+    const sim = simulate(save, stage, { ...opts, seed: (baseSeed + i * 7919) >>> 0 })
+    sims.push(sim)
+    duration += sim.duration
+    if (sim.win) {
+      wins += 1
+      drops.push(
+        ...rollDrops(stage, rng, {
+          dropRate: p.stats.dropRate,
+          rareDropRate: p.stats.rareDropRate,
+        }),
+      )
+    }
+  }
+
+  return {
+    ok: true,
+    stage,
+    times: runs,
+    duration,
+    win: wins > 0,
+    wins,
+    stone: reward.stone * wins,
+    cultivation: reward.cultivation * wins,
+    drops,
+    sims,
+  }
+}
+
 /* ------------------------------ 实时战斗 ------------------------------ */
 
 export interface LiveBattleOptions {
   save: GameSave
   globalStage: number
   seed?: number
+  /** 覆盖关卡敌人（突破战 / 秘境节点战用；缺省走 enemyFor(globalStage)） */
+  enemyOverride?: EnemyStats
 }
 
 /**
@@ -616,7 +719,7 @@ export class LiveBattle {
   constructor(opts: LiveBattleOptions) {
     const { save, globalStage } = opts
     this.p = playerCombatant(save)
-    this.enemy = enemyFor(globalStage)
+    this.enemy = opts.enemyOverride ?? enemyFor(globalStage)
     this.rng = makeRng((opts.seed ?? hashStage(globalStage)) ^ 0x9e3779b9)
     this.dc = flatStage(save.profile.stageId).realm.defenseConstant
 

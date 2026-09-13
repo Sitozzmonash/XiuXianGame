@@ -13,6 +13,7 @@ export const STORY_NODE_BY_ID: Record<string, StoryNode> = Object.fromEntries(
 
 export { NPCS, NPC_BY_ID, npcById, npcName, relationStage }
 export { STORY_NODES, ENCOUNTERS, CHAPTERS, CHAPTER_BY_ID, chapterOf }
+export { SECRET_REALMS, SECRET_REALM_BY_ID } from './secret_realms'
 export type { NpcDef, StoryChapter }
 
 export default {

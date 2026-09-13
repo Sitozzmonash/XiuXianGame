@@ -15,3 +15,13 @@ node_modules
 .DS_Store
 # TypeScript build info
 *.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# 乙方自检产物
+scripts/_probe.ts

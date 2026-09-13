@@ -624,6 +624,8 @@ export interface GameSave {
     mainTechnique: string | null
     supportTechniques: (string | null)[]
     pet: string | null
+    /** 已拥有的灵兽 id（出战为 pet） */
+    ownedPets?: string[]
     /** 另一套方案（Build 切换用） */
     loadoutB: GameSave['combat'] | null
   }

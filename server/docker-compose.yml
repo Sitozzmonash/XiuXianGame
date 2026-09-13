@@ -1,0 +1,43 @@
+# 本机一键起库（可选）：postgres:16 + api
+#   docker compose up -d db          # 只起数据库
+#   docker compose up --build api    # 起 api（挂载源码目录，自动装依赖）
+services:
+  db:
+    image: postgres:16
+    container_name: fanchen-db
+    environment:
+      POSTGRES_USER: fanchen
+      POSTGRES_PASSWORD: fanchen
+      POSTGRES_DB: fanchen
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/10_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fanchen -d fanchen"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: python:3.12-slim
+    container_name: fanchen-api
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://fanchen:fanchen@db:5432/fanchen
+      JWT_SECRET: change-me-in-production
+      TOKEN_TTL_HOURS: "720"
+      MAX_SAVE_BYTES: "1048576"
+      SNAPSHOT_KEEP: "10"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
