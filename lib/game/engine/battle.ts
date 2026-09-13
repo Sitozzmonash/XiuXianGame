@@ -16,6 +16,7 @@ import {
 import {
   ZERO_STATS,
   type BattleEvent,
+  type DamageType,
   type Drop,
   type GameSave,
   type Quality,
@@ -27,6 +28,21 @@ import {
   type TreasureDef,
 } from '../types'
 import { makeRng, mergeStats, scaleStats, type Rng } from '../utils'
+
+/**
+ * 五行属性：resist 机制只减免这些伤害 —— 物理 / 神魂 / 真伤不受影响。
+ * 对应 analyzeFailure() 给玩家的提示「受到元素克制，换一种伤害属性试试」。
+ */
+const ELEMENTAL: ReadonlySet<string> = new Set(['metal', 'wood', 'water', 'fire', 'earth'])
+
+function resistMul(resistsElements: boolean, type: DamageType): number {
+  return resistsElements && ELEMENTAL.has(type) ? 0.85 : 1
+}
+
+/** 法宝封印（treasure_seal）：周期性封住主动法宝与被动法宝，逼玩家靠普攻 / 功法 / 灵兽过渡 */
+const SEAL_FIRST_AT = 14
+const SEAL_INTERVAL = 22
+const SEAL_DURATION = 6
 
 /* ------------------------------ 玩家属性 ------------------------------ */
 
@@ -393,7 +409,9 @@ export function simulate(save: GameSave, globalStage: number, opts: SimOptions =
   const bossThorn = e.def.bossMechanics?.includes('thorn') ?? false
   const bossLifesteal = e.def.bossMechanics?.includes('lifesteal') ?? false
   const bossEvade = e.def.bossMechanics?.includes('evade') ?? false
-  const resist = (e.def.bossMechanics?.includes('resist') ?? false) ? 0.85 : 1
+  const bossSeal = e.def.bossMechanics?.includes('treasure_seal') ?? false
+  const bossPhase = e.def.bossMechanics?.includes('phase') ?? false
+  const resistsElements = e.def.bossMechanics?.includes('resist') ?? false
 
   const player: Actor = { hp: p.maxHp, maxHp: p.maxHp, shield: 0 }
   const foe: Actor = { hp: e.maxHp, maxHp: e.maxHp, shield: 0 }
@@ -409,6 +427,9 @@ export function simulate(save: GameSave, globalStage: number, opts: SimOptions =
   let shieldTimer = 8
   let burstTimer = e.def.bossMechanics?.includes('burst') ? 11 : Infinity
   const dotEnabled = e.def.bossMechanics?.includes('dot') ?? false
+  let sealNextAt = bossSeal ? SEAL_FIRST_AT : Infinity
+  /** 0 = 当前未被封；只有 sealNextAt 触发后才写入结束时刻 */
+  let sealUntil = 0
 
   const hitEnemy = (raw: number) => {
     const dmg = raw
@@ -447,11 +468,18 @@ export function simulate(save: GameSave, globalStage: number, opts: SimOptions =
           pen: p.stats.pen,
           dmgBonus: bossBonus(p.stats, e.def.kind),
         })
-        hitEnemy(Math.round(r.value * resist))
+        hitEnemy(Math.round(r.value * resistMul(resistsElements, 'physical')))
       }
     }
 
+    if (bossSeal && t > sealNextAt) {
+      sealNextAt = t + SEAL_INTERVAL
+      sealUntil = t + SEAL_DURATION
+    }
+    const sealed = t < sealUntil
+
     for (let i = 0; i < p.skills.length; i++) {
+      if (sealed) break
       pCds[i] -= dt
       if (pCds[i] > 0) continue
       const sk = p.skills[i]
@@ -473,7 +501,7 @@ export function simulate(save: GameSave, globalStage: number, opts: SimOptions =
           dmgBonus:
             bossBonus(p.stats, e.def.kind) + elementBonus(p.stats, sk.damageType),
         })
-        hitEnemy(Math.round(r.value * resist))
+        hitEnemy(Math.round(r.value * resistMul(resistsElements, sk.damageType)))
       }
     }
 
@@ -501,13 +529,15 @@ export function simulate(save: GameSave, globalStage: number, opts: SimOptions =
       player.hp = Math.min(player.maxHp, player.hp + p.stats.hpRegen)
     }
     for (const pas of p.passives) {
-      if (pas.cast === 'heal' && t % 5 < dt) player.hp = Math.min(player.maxHp, player.hp + p.maxHp * 0.02)
+      if (!sealed && pas.cast === 'heal' && t % 5 < dt) player.hp = Math.min(player.maxHp, player.hp + p.maxHp * 0.02)
     }
 
     eAtkTimer -= dt
     if (eAtkTimer <= 0) {
       eAtkTimer = 1 / Math.max(0.2, e.aspd)
-      const mul = bossEnrage && t > enrageAt ? 1.5 : 1
+      const enrageMul = bossEnrage && t > enrageAt ? 1.5 : 1
+      const phaseMul = bossPhase && foe.hp < foe.maxHp * 0.4 ? 1.25 : 1
+      const mul = enrageMul * phaseMul
       const r = damage(e.atk * mul, 1, p.stats.def, dc, e.crit, e.critDmg, rng)
       hurtPlayer(r.value)
       if (p.stats.thorn > 0) foe.hp -= r.value * p.stats.thorn
@@ -712,6 +742,9 @@ export class LiveBattle {
   private burstTimer: number
   private enrageAt: number
   private enraged = false
+  private sealNextAt: number
+  /** 0 = 当前未被封；只有 sealNextAt 触发后才写入结束时刻 */
+  private sealUntil = 0
   private playerDamage = 0
   private enemyDamage = 0
   private paused = false
@@ -747,6 +780,7 @@ export class LiveBattle {
     this.shieldTimer = 8
     this.burstTimer = this.enemy.def.bossMechanics?.includes('burst') ? 11 : Infinity
     this.enrageAt = 26
+    this.sealNextAt = this.enemy.def.bossMechanics?.includes('treasure_seal') ? SEAL_FIRST_AT : Infinity
 
     this.emit('cast', 'enemy', 'player', undefined, undefined, false, this.enemy.name, this.enemy.def.icon, 'burst')
   }
@@ -827,7 +861,9 @@ export class LiveBattle {
     const bossShield = mech.includes('shield')
     const bossEnrage = mech.includes('enrage')
     const bossEvade = mech.includes('evade')
-    const resist = mech.includes('resist') ? 0.85 : 1
+    const bossSeal = mech.includes('treasure_seal')
+    const bossPhase = mech.includes('phase')
+    const resistsElements = mech.includes('resist')
 
     this.pAtkTimer -= dt
     if (this.pAtkTimer <= 0) {
@@ -839,11 +875,19 @@ export class LiveBattle {
           pen: p.stats.pen,
           dmgBonus: bossBonus(p.stats, e.def.kind),
         })
-        this.hitEnemy(Math.round(r.value * resist), r.crit, 'physical', 'slash')
+        this.hitEnemy(Math.round(r.value * resistMul(resistsElements, 'physical')), r.crit, 'physical', 'slash')
       }
     }
 
+    if (bossSeal && st.time > this.sealNextAt) {
+      this.sealNextAt = st.time + SEAL_INTERVAL
+      this.sealUntil = st.time + SEAL_DURATION
+      this.emit('cast', 'enemy', 'player', undefined, undefined, false, '法宝封印')
+    }
+    const sealed = st.time < this.sealUntil
+
     for (let i = 0; i < p.skills.length; i++) {
+      if (sealed) break
       st.skillCds[i] -= dt
       if (st.skillCds[i] > 0) continue
       const sk = p.skills[i]
@@ -870,7 +914,7 @@ export class LiveBattle {
           pen: p.stats.pen,
           dmgBonus: bossBonus(p.stats, e.def.kind) + elementBonus(p.stats, sk.damageType),
         })
-        this.hitEnemy(Math.round(r.value * resist), r.crit, sk.damageType, fx)
+        this.hitEnemy(Math.round(r.value * resistMul(resistsElements, sk.damageType)), r.crit, sk.damageType, fx)
       }
     }
 
@@ -896,7 +940,7 @@ export class LiveBattle {
       }
     }
 
-    if (p.passives.length && st.time % 5 < dt) {
+    if (!sealed && p.passives.length && st.time % 5 < dt) {
       for (const pas of p.passives) {
         if (pas.cast === 'heal') {
           const heal = p.maxHp * 0.02
@@ -909,7 +953,7 @@ export class LiveBattle {
     this.eAtkTimer -= dt
     if (this.eAtkTimer <= 0) {
       this.eAtkTimer = 1 / Math.max(0.2, e.aspd)
-      const mul = bossEnrage && this.enraged ? 1.5 : 1
+      const mul = (bossEnrage && this.enraged ? 1.5 : 1) * (bossPhase && st.enemyHp < e.maxHp * 0.4 ? 1.25 : 1)
       const r = damage(e.atk * mul, 1, p.stats.def, this.dc, e.crit, e.critDmg, this.rng)
       this.hurtPlayer(r.value, e.def.element as BattleEvent['damageType'])
     }
