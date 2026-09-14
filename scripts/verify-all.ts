@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------ *
  * 《凡尘问道》乙方交付自检 —— npx tsx scripts/verify-all.ts
  *
- * 覆盖分工说明.md 的验收标准：
+ * 覆盖以下验收标准（对应 PRD 数值与系统章节）：
  *   1. B1  200 关可查询 / 无 20 连纯普通关 / 怪物与 Boss 机制数量 / 剧情挂载表
  *   2. B7  掉落保底（蓝 6 / 紫 25）/ 自动分解 / 背包容量
  *   3. B5  挂机 24h 封顶
@@ -142,7 +142,7 @@ ok('Boss 均有 ≥2 种机制', bossMonsters.length >= 4 && bossMonsters.every(
 ok('Boss 均有专属技能', bossMonsters.every((b) => (b.skills?.length ?? 0) >= 1))
 ok('精英怪均有机制', MONSTERS.filter((m) => m.kind === 'elite').every((m) => (m.bossMechanics?.length ?? 0) >= 1))
 
-/* 剧情 / 秘境挂载表（分工说明 B1） */
+/* 剧情 / 秘境挂载表（与 maps.ts 底部声明一致） */
 const MOUNTS: [number, string, 'storyId' | 'realmId'][] = [
   [3, 'qs_01_missing', 'storyId'],
   [10, 'qs_02_jade', 'storyId'],

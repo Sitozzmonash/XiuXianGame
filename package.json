@@ -9,7 +9,6 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "verify": "tsx scripts/verify-all.ts",
-    "verify:maps": "tsx scripts/verify-maps.ts",
     "verify:engines": "tsx scripts/verify-engines.ts"
   },
   "dependencies": {

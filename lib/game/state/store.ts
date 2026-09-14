@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------ *
  * 《凡尘问道》存档状态机（Zustand + persist）
  *
- * 乙方交付：分工说明.md「边界 2」的全部动作。
+ * 引擎结果落盘层：承接 battle / story / realm / idle / breakthrough / loot 的全部动作。
  * 约定：
  *  · UI 只读 state.save、只调 action，不直接改存档；
  *  · 所有引擎（battle / story / realm / idle / breakthrough / loot）都是纯函数，
