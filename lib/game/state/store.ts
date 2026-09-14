@@ -78,6 +78,7 @@ import {
   type EffectBundle,
 } from '../engine/story'
 import { PILL_BY_ID } from '../config/pills'
+import { RECIPE_BY_ID } from '../config/recipes'
 import { SKIN_BY_ID } from '../config/skins'
 import { localDayIndex, makeRng, uid, formatNumber } from '../utils'
 import {
@@ -124,12 +125,13 @@ function cultivationMaxOf(s: GameSave): number {
   return flatStage(s.profile.stageId).stage.cultivationMax
 }
 
-/** 修为入账并按当前阶段上限封顶（满了就提示突破，不溢出） */
+/** 
+ * 修为入账：允许溢出存储，不丢弃挂机与通关收益，
+ * 达到突破要求后提示突破，溢出的修为在突破成功后继续保留。
+ */
 function addCultivation(s: GameSave, amount: number): void {
   if (!Number.isFinite(amount) || amount <= 0) return
-  const max = cultivationMaxOf(s)
-  if (s.profile.cultivation >= max) return
-  s.profile.cultivation = Math.min(max, s.profile.cultivation + Math.round(amount))
+  s.profile.cultivation = (s.profile.cultivation ?? 0) + Math.round(amount)
 }
 
 function ensureNpc(s: GameSave, id: string): GameSave['npcs'][string] {
@@ -339,9 +341,11 @@ function applyBreakthroughOutcome(s: GameSave, outcome: BreakthroughOutcome): vo
     for (const m of outcome.consumedMaterials) {
       s.inventory.materials[m.id] = Math.max(0, (s.inventory.materials[m.id] ?? 0) - m.count)
     }
+    const oldMax = flatStage(s.profile.stageId).stage.cultivationMax
     s.profile.stageId = outcome.toStageId
     s.profile.realmId = flatStage(outcome.toStageId).realm.id
-    s.profile.cultivation = 0
+    // 突破扣除突破所需的基础满额修为，保留溢出修为，不再直接变 0
+    s.profile.cultivation = Math.max(0, (s.profile.cultivation ?? 0) - oldMax)
     s.profile.weakUntil = undefined
     for (const key of outcome.unlocked) {
       s.story.flags[key] = true
@@ -441,6 +445,7 @@ export interface GameStore {
   expandCapacity: () => number
   setAutoSalvage: (q: Quality | 'off') => void
   usePill: (id: string, count?: number) => boolean
+  brewPill: (recipeId: string, count?: number) => BrewResult
 
   /* 法宝 / 功法 / 灵兽 */
   equipTreasure: (slotIndex: number, defId: string) => boolean
@@ -520,6 +525,15 @@ export interface MallBuyResult {
   reason?: string
   /** 成功时的结算描述（toast / 弹窗用） */
   text?: string
+}
+
+export interface BrewResult {
+  ok: boolean
+  reason?: string
+  /** 炼出的丹药名称 */
+  pillName?: string
+  /** 炼出的数量 */
+  count?: number
 }
 
 /* ------------------------------ store ------------------------------ */
@@ -1034,6 +1048,42 @@ export const useGameStore = create<GameStore>()(
             pushLog(s, `服下 ${def.name} ×${count}。`, 'reward')
           })
           return true
+        },
+
+        brewPill: (recipeId, count = 1) => {
+          const s0 = get().save
+          const recipe = RECIPE_BY_ID[recipeId]
+          if (!recipe || count <= 0) return { ok: false, reason: '丹方不存在' }
+          if (s0.progress.maxStage < recipe.unlockStage) {
+            return { ok: false, reason: `需通关第 ${recipe.unlockStage} 关解锁此丹方` }
+          }
+          const totalCostStone = recipe.costStone * count
+          if (s0.resources.stone < totalCostStone) {
+            return {
+              ok: false,
+              reason: `灵石不足（需 ${formatNumber(totalCostStone)}，当前 ${formatNumber(s0.resources.stone)}）`,
+            }
+          }
+          for (const m of recipe.materials) {
+            const need = m.count * count
+            const have = s0.inventory.materials[m.materialId] ?? 0
+            if (have < need) {
+              return { ok: false, reason: `材料不足：缺少所需药材` }
+            }
+          }
+          const pill = PILL_BY_ID[recipe.pillId]
+          mutate((s) => {
+            s.resources.stone -= totalCostStone
+            for (const m of recipe.materials) {
+              s.inventory.materials[m.materialId] = Math.max(
+                0,
+                (s.inventory.materials[m.materialId] ?? 0) - m.count * count,
+              )
+            }
+            s.inventory.pills[recipe.pillId] = (s.inventory.pills[recipe.pillId] ?? 0) + count
+            pushLog(s, `开炉炼丹：炼得「${pill?.name ?? recipe.name}」×${count}。`, 'reward')
+          })
+          return { ok: true, pillName: pill?.name ?? recipe.name, count }
         },
 
         /* ------------------------------ 法宝 / 功法 / 灵兽 ------------------------------ */
