@@ -16,12 +16,16 @@ import { CaveScreen } from './screens/CaveScreen'
 import { SectScreen } from './screens/SectScreen'
 import { DungeonScreen } from './screens/DungeonScreen'
 import { RankingScreen } from './screens/RankingScreen'
+import { SecretRealmFlow } from './screens/SecretRealmFlow'
 import { EquipmentModal } from './modals/EquipmentModal'
 import { TreasureModal } from './modals/TreasureModal'
 import { IdleModal } from './modals/IdleModal'
 import { useGameStore } from '@/lib/game/state/store'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
+import { MATERIAL_BY_ID } from '@/lib/game/config/materials'
 import { StoryFlow } from './overlays/StoryFlow'
+import { SagaBook } from './overlays/SagaBook'
+import { BreakthroughOverlay } from './overlays/BreakthroughOverlay'
 
 const SCREEN_TAB: Partial<Record<Screen, BottomTab>> = {
   cave: 'cave',
@@ -33,6 +37,29 @@ const SCREEN_TAB: Partial<Record<Screen, BottomTab>> = {
 
 const NAV_SCREENS: Screen[] = ['login', 'battle']
 
+/** 突破解锁的 flag → 玩家能看懂的功能名 */
+const UNLOCK_LABEL: Record<string, string> = {
+  cave: '洞府',
+  foundation: '筑基境界',
+  realm: '秘境探索',
+  alchemy: '炼丹',
+  forge: '炼器',
+  pet: '灵兽',
+  sect: '宗门',
+  tower: '通天塔',
+  world_truth: '世界真相页',
+}
+
+interface BreakthroughView {
+  fromLabel: string
+  toLabel: string | null
+  success: boolean
+  bossName?: string | null
+  consumedMaterials: { name: string; count: number }[]
+  unlocked: string[]
+  failMessage?: string
+}
+
 export function GameShell() {
   const [screen, setScreen] = useState<Screen>('login')
   const [modal, setModal] = useState<ModalKind>(null)
@@ -43,6 +70,31 @@ export function GameShell() {
   const battle = useGameStore((s) => s.battle)
   const startBattle = useGameStore((s) => s.startBattle)
   const finishBattle = useGameStore((s) => s.finishBattle)
+
+  const [sagaOpen, setSagaOpen] = useState(false)
+  const [bt, setBt] = useState<BreakthroughView | null>(null)
+  /** 正在游玩的秘境 id；非空时接管整个游戏区域 */
+  const [realmId, setRealmId] = useState<string | null>(null)
+
+  /** 突破：跑一次判定，把结果映射成演出需要的展示数据 */
+  const handleBreakthrough = useCallback(() => {
+    const g = useGameStore.getState()
+    const check = g.canBreakthrough()
+    if (!check.can) return
+    const res = g.doBreakthrough()
+    setBt({
+      fromLabel: res.outcome.fromLabel,
+      toLabel: res.outcome.success ? res.outcome.toLabel : null,
+      success: res.outcome.success,
+      bossName: res.check.bossName,
+      consumedMaterials: res.outcome.consumedMaterials.map((m) => ({
+        name: MATERIAL_BY_ID[m.id]?.name ?? m.id,
+        count: m.count,
+      })),
+      unlocked: res.outcome.unlocked.map((u) => UNLOCK_LABEL[u] ?? u),
+      failMessage: res.outcome.success ? undefined : res.outcome.message,
+    })
+  }, [])
 
   /* 进入游戏后结算一次挂机收益 */
   useEffect(() => {
@@ -136,7 +188,7 @@ export function GameShell() {
     [finishBattle],
   )
 
-  const showNav = !NAV_SCREENS.includes(screen)
+  const showNav = !NAV_SCREENS.includes(screen) && realmId === null
   const activeTab = SCREEN_TAB[screen] ?? 'cave'
 
   const renderScreen = () => {
@@ -151,6 +203,7 @@ export function GameShell() {
             onOpenProfile={() => setScreen('character')}
             onOpenSettings={() => setModal('idle')}
             onAdd={() => setModal('idle')}
+            onOpenSaga={() => setSagaOpen(true)}
           />
         )
       case 'battle':
@@ -196,7 +249,7 @@ export function GameShell() {
         return (
           <RealmScreen
             onBack={() => setScreen('home')}
-            onBreakthrough={() => setModal('idle')}
+            onBreakthrough={handleBreakthrough}
           />
         )
       case 'techniques':
@@ -214,7 +267,12 @@ export function GameShell() {
         return (
           <DungeonScreen
             onBack={() => setScreen('home')}
-            onEnter={() => setScreen('battle')}
+            onEnter={() => {
+              // DungeonScreen 内部已调 enterRealm，这里读最新存档取 id，
+              // 避免拿到渲染时那一次的 stale 闭包值
+              const id = useGameStore.getState().save.realmRun?.realmId
+              if (id) setRealmId(id)
+            }}
           />
         )
       case 'ranking':
@@ -228,7 +286,13 @@ export function GameShell() {
     <div className="flex min-h-[100dvh] items-center justify-center bg-ink-950 sm:p-6">
       <div className="relative h-[100dvh] w-full max-w-[430px] overflow-hidden bg-ink-950 sm:h-[880px] sm:max-h-[94vh] sm:rounded-[2rem] sm:ring-1 sm:ring-gold-300/20 sm:shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
         <div className="relative flex h-full flex-col">
-          <div className="relative flex-1 overflow-hidden">{renderScreen()}</div>
+          <div className="relative flex-1 overflow-hidden">
+            {realmId ? (
+              <SecretRealmFlow realmId={realmId} onLeave={() => setRealmId(null)} />
+            ) : (
+              renderScreen()
+            )}
+          </div>
           {showNav && (
             <BottomNavigation active={activeTab} onNavigate={setScreen} />
           )}
@@ -245,6 +309,18 @@ export function GameShell() {
           treasure={treasure}
         />
         <IdleModal open={modal === 'idle'} onClose={closeModal} />
+        <SagaBook open={sagaOpen} onClose={() => setSagaOpen(false)} save={save} />
+        <BreakthroughOverlay
+          open={bt !== null}
+          fromLabel={bt?.fromLabel ?? ''}
+          toLabel={bt?.toLabel ?? null}
+          success={bt?.success ?? false}
+          bossName={bt?.bossName}
+          consumedMaterials={bt?.consumedMaterials}
+          unlocked={bt?.unlocked}
+          failMessage={bt?.failMessage}
+          onClose={() => setBt(null)}
+        />
         <div className="pointer-events-none absolute inset-0 z-[70] [&>*]:pointer-events-auto">
           <StoryFlow
             enabled={screen !== 'battle' && screen !== 'login' && modal === null}

@@ -421,7 +421,7 @@ export interface GameStore {
 
   /* 法宝 / 功法 / 灵兽 */
   equipTreasure: (slotIndex: number, defId: string) => boolean
-  unequipTreasure: (slotIndex: number) => boolean
+  unequipTreasure: (slotIndex: number, kind?: 'active' | 'passive') => boolean
   upgradeTreasure: (defId: string) => boolean
   setMainTechnique: (id: string) => boolean
   setSupportTechnique: (index: number, id: string | null) => boolean
@@ -995,14 +995,27 @@ export const useGameStore = create<GameStore>()(
           return true
         },
 
-        unequipTreasure: (slotIndex) => {
+        unequipTreasure: (slotIndex, kind) => {
           const s0 = get().save
-          const inActive = s0.combat.activeTreasures[slotIndex] != null
-          const inPassive = s0.combat.passiveTreasures[slotIndex] != null
-          if (!inActive && !inPassive) return false
+          const activeId = s0.combat.activeTreasures[slotIndex] ?? null
+          const passiveId = s0.combat.passiveTreasures[slotIndex] ?? null
+
+          // 主动 5 槽与被动 2 槽的索引会重叠（0/1），必须按 kind 精确定位。
+          // 未传 kind 时用槽里法宝自身的 kind 推断，避免把同号的另一侧一起卸掉。
+          const resolvedKind: 'active' | 'passive' | null =
+            kind ??
+            (passiveId && !activeId
+              ? 'passive'
+              : activeId && !passiveId
+                ? 'active'
+                : null)
+          if (!resolvedKind) return false
+          const defId = resolvedKind === 'active' ? activeId : passiveId
+          if (!defId) return false
+
           mutate((s) => {
-            if (inActive) s.combat.activeTreasures[slotIndex] = null
-            if (inPassive) s.combat.passiveTreasures[slotIndex] = null
+            if (resolvedKind === 'active') s.combat.activeTreasures[slotIndex] = null
+            else s.combat.passiveTreasures[slotIndex] = null
             const equipped = new Set(
               [...s.combat.activeTreasures, ...s.combat.passiveTreasures].filter(Boolean) as string[],
             )
