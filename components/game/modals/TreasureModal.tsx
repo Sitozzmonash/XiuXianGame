@@ -1,7 +1,7 @@
 'use client'
 
 import { ArrowUpCircle, Coins, Sparkles, Timer } from 'lucide-react'
-import type { Treasure } from '@/lib/game-data'
+import type { TreasureDetail } from '@/lib/game/ui-tokens'
 import type { TreasureDef } from '@/lib/game/types'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { useGameStore } from '@/lib/game/state/store'
@@ -36,7 +36,7 @@ export function TreasureModal({
 }: {
   open: boolean
   onClose: () => void
-  treasure: Treasure | null
+  treasure: TreasureDetail | null
 }) {
   const save = useGameStore((s) => s.save)
   const equipTreasure = useGameStore((s) => s.equipTreasure)

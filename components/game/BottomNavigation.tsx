@@ -33,7 +33,7 @@ export function BottomNavigation({
       className={cn(
         'relative z-20 flex items-stretch justify-around border-t border-gold-300/20',
         'bg-gradient-to-t from-ink-950 via-ink-950/95 to-ink-900/80 px-1 pt-1.5',
-        'pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm',
+        'pb-safe backdrop-blur-sm',
         className,
       )}
     >
@@ -45,7 +45,7 @@ export function BottomNavigation({
             type="button"
             onClick={() => onNavigate(tab.screen)}
             aria-current={isActive ? 'page' : undefined}
-            className="group relative flex flex-1 flex-col items-center gap-0.5 py-1"
+            className="group relative flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 py-1"
           >
             <span
               className={cn(

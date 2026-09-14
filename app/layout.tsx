@@ -37,6 +37,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // 不加 cover 时 iOS 上 env(safe-area-inset-*) 恒为 0，安全区适配会失效
+  viewportFit: 'cover',
   themeColor: '#070908',
 }
 

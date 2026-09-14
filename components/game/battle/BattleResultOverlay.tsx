@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { QUALITY, type Quality } from '@/lib/game-data'
+import { QUALITY, isHighQuality as isHighTier, qualityRank } from '@/lib/game/ui-tokens'
+import type { Quality } from '@/lib/game/types'
 import { GameIcon } from '../GameIcon'
 import { InkButton } from '../primitives'
 
@@ -56,12 +57,6 @@ const REVEAL_DELAY: Record<Quality, number> = {
   orange: 900,
   red: 1500,
   rainbow: 1900,
-}
-
-const HIGH_TIER: Quality[] = ['orange', 'red', 'rainbow']
-
-function isHighTier(q: Quality): boolean {
-  return HIGH_TIER.includes(q)
 }
 
 export function BattleResultOverlay({
@@ -313,18 +308,6 @@ function DropCard({ drop, shown }: { drop: BattleDropView; shown: boolean }) {
       </span>
     </div>
   )
-}
-
-function qualityRank(q: Quality): number {
-  return [
-    'white',
-    'green',
-    'blue',
-    'purple',
-    'orange',
-    'red',
-    'rainbow',
-  ].indexOf(q)
 }
 
 function formatShort(n: number): string {

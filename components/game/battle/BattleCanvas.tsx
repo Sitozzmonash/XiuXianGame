@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { QUALITY, type Quality } from '@/lib/game-data'
+import { QUALITY } from '@/lib/game/ui-tokens'
+import type { Quality } from '@/lib/game/types'
 import type { BattleEvent, LiveBattleState } from '@/lib/game/types'
 import {
   type Beam,

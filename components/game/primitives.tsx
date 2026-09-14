@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { QUALITY, type Quality } from '@/lib/game-data'
+import { QUALITY } from '@/lib/game/ui-tokens'
+import type { Quality } from '@/lib/game/types'
 
 /* ------------------------------------------------------------------ */
 /* 红点                                                                */
@@ -205,7 +206,7 @@ export function ResourceValue({
           type="button"
           onClick={onAdd}
           aria-label="获取更多"
-          className="flex size-4 items-center justify-center rounded-full bg-gold-400/90 text-[11px] font-bold leading-none text-ink-950"
+          className="relative flex size-4 items-center justify-center rounded-full bg-gold-400/90 text-[11px] font-bold leading-none text-ink-950 after:absolute after:-inset-3 after:content-['']"
         >
           +
         </button>

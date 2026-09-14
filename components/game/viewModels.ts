@@ -7,7 +7,8 @@
  * 功法流派名都在这里统一，组件只管渲染。
  * ------------------------------------------------------------------ */
 
-import { QUALITY, type Quality } from '@/lib/game-data'
+import { QUALITY } from '@/lib/game/ui-tokens'
+import type { Quality } from '@/lib/game/types'
 import { EQUIP_SLOT_LABEL, SCHOOL_LABEL, type EquipInstance, type Stats } from '@/lib/game/types'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { TECHNIQUE_BY_ID } from '@/lib/game/config/techniques'

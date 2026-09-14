@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { BottomTab, ModalKind, Screen } from '@/lib/navigation'
-import type { Treasure } from '@/lib/game-data'
+import type { TreasureDetail } from '@/lib/game/ui-tokens'
 import { BottomNavigation } from './BottomNavigation'
 import { LoginScreen } from './screens/LoginScreen'
 import { MainScreen } from './screens/MainScreen'
@@ -23,9 +23,11 @@ import { IdleModal } from './modals/IdleModal'
 import { useGameStore } from '@/lib/game/state/store'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { MATERIAL_BY_ID } from '@/lib/game/config/materials'
+import { playSfx, setSfxEnabled, unlockAudio } from '@/lib/game/audio'
 import { StoryFlow } from './overlays/StoryFlow'
 import { SagaBook } from './overlays/SagaBook'
 import { BreakthroughOverlay } from './overlays/BreakthroughOverlay'
+import { OnboardingToast } from './OnboardingToast'
 
 const SCREEN_TAB: Partial<Record<Screen, BottomTab>> = {
   cave: 'cave',
@@ -63,7 +65,7 @@ interface BreakthroughView {
 export function GameShell() {
   const [screen, setScreen] = useState<Screen>('login')
   const [modal, setModal] = useState<ModalKind>(null)
-  const [treasure, setTreasure] = useState<Treasure | null>(null)
+  const [treasure, setTreasure] = useState<TreasureDetail | null>(null)
   const [equipName, setEquipName] = useState<string | undefined>(undefined)
 
   const save = useGameStore((s) => s.save)
@@ -82,6 +84,7 @@ export function GameShell() {
     const check = g.canBreakthrough()
     if (!check.can) return
     const res = g.doBreakthrough()
+    playSfx(res.outcome.success ? 'breakthrough' : 'defeat')
     setBt({
       fromLabel: res.outcome.fromLabel,
       toLabel: res.outcome.success ? res.outcome.toLabel : null,
@@ -113,6 +116,22 @@ export function GameShell() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
+  /* 浏览器禁止音频自动播放：首次用户交互时才解锁 AudioContext */
+  useEffect(() => {
+    const onFirst = () => unlockAudio()
+    window.addEventListener('pointerdown', onFirst, { once: true })
+    window.addEventListener('keydown', onFirst, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', onFirst)
+      window.removeEventListener('keydown', onFirst)
+    }
+  }, [])
+
+  /* 音效开关跟随存档设置 */
+  useEffect(() => {
+    setSfxEnabled(save.settings.sfx)
+  }, [save.settings.sfx])
+
   /* 奇遇计时：不在战斗中时每秒递减冷却，冷却归零则抽一个奇遇入队 */
   useEffect(() => {
     if (screen === 'battle' || screen === 'login') return
@@ -131,7 +150,7 @@ export function GameShell() {
     return () => window.clearInterval(id)
   }, [screen])
 
-  const openTreasure = useCallback((t: Treasure) => {
+  const openTreasure = useCallback((t: TreasureDetail) => {
     setTreasure(t)
     setModal('treasure')
   }, [])
@@ -148,7 +167,7 @@ export function GameShell() {
         id: def.id,
         name: def.name,
         level: owned?.level ?? 1,
-        quality: def.quality as Treasure['quality'],
+        quality: def.quality,
         icon: def.icon,
         cooldown: def.cooldown,
         ready: 1,
@@ -255,12 +274,7 @@ export function GameShell() {
       case 'techniques':
         return <TechniqueScreen onBack={() => setScreen('home')} />
       case 'cave':
-        return (
-          <CaveScreen
-            onBack={() => setScreen('home')}
-            onSelectBuilding={() => setModal('idle')}
-          />
-        )
+        return <CaveScreen onBack={() => setScreen('home')} />
       case 'sect':
         return <SectScreen onBack={() => setScreen('home')} />
       case 'dungeon':
@@ -284,9 +298,9 @@ export function GameShell() {
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-ink-950 sm:p-6">
-      <div className="relative h-[100dvh] w-full max-w-[430px] overflow-hidden bg-ink-950 sm:h-[880px] sm:max-h-[94vh] sm:rounded-[2rem] sm:ring-1 sm:ring-gold-300/20 sm:shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
-        <div className="relative flex h-full flex-col">
-          <div className="relative flex-1 overflow-hidden">
+      <div className="pt-safe px-safe relative h-[100dvh] w-full max-w-[430px] overflow-hidden bg-ink-950 sm:h-[880px] sm:max-h-[94vh] sm:rounded-[2rem] sm:ring-1 sm:ring-gold-300/20 sm:shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+        <div className="relative flex h-full min-h-0 flex-col">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
             {realmId ? (
               <SecretRealmFlow realmId={realmId} onLeave={() => setRealmId(null)} />
             ) : (
@@ -309,6 +323,7 @@ export function GameShell() {
           treasure={treasure}
         />
         <IdleModal open={modal === 'idle'} onClose={closeModal} />
+        <OnboardingToast enabled={screen !== 'battle' && screen !== 'login' && modal === null} />
         <SagaBook open={sagaOpen} onClose={() => setSagaOpen(false)} save={save} />
         <BreakthroughOverlay
           open={bt !== null}

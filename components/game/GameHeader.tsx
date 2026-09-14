@@ -104,7 +104,7 @@ export function GameHeader({
           type="button"
           onClick={onOpenSettings}
           aria-label="设置"
-          className="flex size-7 items-center justify-center rounded-full border border-gold-300/25 bg-ink-950/70 text-cream-dim transition-colors hover:text-gold-200"
+          className="relative flex size-7 items-center justify-center rounded-full border border-gold-300/25 bg-ink-950/70 text-cream-dim transition-colors after:absolute after:-inset-1.5 after:content-[''] hover:text-gold-200"
         >
           <Settings className="size-3.5" />
         </button>

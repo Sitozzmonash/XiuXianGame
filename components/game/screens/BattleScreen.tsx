@@ -5,8 +5,9 @@ import { FastForward, Home, LogOut, Pause, Play, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { PET_BY_ID } from '@/lib/game/config/pets'
-import { QUALITY } from '@/lib/game-data'
+import { qualityRank } from '@/lib/game/ui-tokens'
 import { useGameStore } from '@/lib/game/state/store'
+import { playBattleEventSfx, playSfx } from '@/lib/game/audio'
 import { stageView } from '@/lib/game/state/selectors'
 import { formatNumber } from '@/lib/game/utils'
 import type { GameSave, Quality } from '@/lib/game/types'
@@ -80,6 +81,12 @@ export function BattleScreen({
     (info: BattleResultInfo) => {
       const result = onFinishBattle(info.win, info.failReason)
       setFinish({ ...result, failReason: info.failReason })
+      // 结算前的掉落音：红/彩品质单独给音，这是玩家最想听到的反馈之一
+      if (info.win) {
+        const best = bestQuality(result.drops)
+        if (best === 'red' || best === 'rainbow') playSfx('dropRed')
+        else if (best === 'orange') playSfx('dropHigh')
+      }
     },
     [onFinishBattle],
   )
@@ -90,6 +97,24 @@ export function BattleScreen({
     speed,
     onFinish: handleFinish,
   })
+
+  /* 战斗音效：driver.events 是累积列表，用游标只消费新增部分 */
+  const sfxCursor = useRef(0)
+  useEffect(() => {
+    const list = driver.events
+    if (list.length < sfxCursor.current) sfxCursor.current = 0
+    for (let i = sfxCursor.current; i < list.length; i++) {
+      const ev = list[i]
+      playBattleEventSfx({
+        type: ev.type,
+        damageType: ev.damageType ?? null,
+        crit: ev.crit,
+        fx: ev.fx ?? null,
+        quality: ev.type === 'drop' ? ((ev.icon as Quality | undefined) ?? null) : null,
+      })
+    }
+    sfxCursor.current = list.length
+  }, [driver.events])
 
   /* 容器尺寸自适应：Canvas 由父层给尺寸，内部按 DPR 适配 */
   useEffect(() => {
@@ -286,7 +311,7 @@ export function BattleScreen({
           finish
             ? [
                 { label: '修为', value: `+${formatNumber(finish.cultivation)}`, icon: 'spark' },
-                { label: '灵石', value: `+${formatNumber(finish.stone)}`, icon: 'coin' },
+                { label: '灵石', value: `+${formatNumber(finish.stone)}`, icon: 'token' },
               ]
             : undefined
         }
@@ -343,4 +368,13 @@ function chapterLabel(chapter: number): string {
   return names[chapter - 1] ?? String(chapter)
 }
 
-export { QUALITY }
+/** 掉落里最高的品质；没有品质信息时按白色处理 */
+function bestQuality(drops: Drop[]): Quality {
+  let best: Quality = 'white'
+  for (const d of drops) {
+    const q = d.quality
+    if (q && qualityRank(q) > qualityRank(best)) best = q
+  }
+  return best
+}
+

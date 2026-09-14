@@ -299,6 +299,14 @@
   body {
     @apply bg-background text-foreground;
   }
+  html,
+  body {
+    /* 挂机游戏页面本身不滚动，禁掉下拉刷新 / 橡皮筋回弹 */
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    /* 去掉 300ms 双击缩放延迟，同时保留 pinch 缩放 */
+    touch-action: manipulation;
+  }
 }
 
 @utility text-glow-gold {
@@ -357,4 +365,20 @@
     rgba(7, 9, 8, 0.55) 78%,
     rgba(7, 9, 8, 0.92) 100%
   );
+}
+
+/* 安全区（刘海 / 圆角 / 底部手势条）。env() 在不支持或未开启
+   viewport-fit=cover 时无值，max(..., 0px) 兜底避免整条声明失效。 */
+@utility pt-safe {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+@utility px-safe {
+  padding-left: max(env(safe-area-inset-left), 0px);
+  padding-right: max(env(safe-area-inset-right), 0px);
+}
+
+/* 0.5rem 保底：无手势条的设备（多数 Android / PC）也需要与标签的呼吸间距 */
+@utility pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom), 0px);
 }
