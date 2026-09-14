@@ -42,6 +42,11 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     device_id: Mapped[str | None] = mapped_column(String(128), unique=True, index=True, nullable=True)
+    # 站内账号（用户名 + 密码）：用户名即登录名，密码只存 bcrypt 哈希
+    username: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 测试 / 运营账号标记：客户端据此显示调试面板（见前端 SettingsScreen）
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_guest: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

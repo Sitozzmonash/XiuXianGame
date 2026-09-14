@@ -27,6 +27,9 @@ export const QUALITY: Record<Quality, QualityToken> = {
   rainbow: { label: '神品', ring: '#e8c877', text: '#f6e6b8', glow: 'rgba(232,200,119,0.6)' },
 }
 
+/** 应用构建标识（设置页「关于」展示用，与后端 app_version 各自维护） */
+export const APP_BUILD = 'v0.2.0'
+
 /** 品质在序列中的位置，用于排序与「高于/低于」判断 */
 export function qualityRank(q: Quality): number {
   return QUALITY_ORDER.indexOf(q)

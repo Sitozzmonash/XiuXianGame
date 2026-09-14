@@ -13,6 +13,7 @@ import { availableNodes, nodeOf, realmById } from '@/lib/game/engine/realm'
 import { MONSTER_BY_ID } from '@/lib/game/config/maps'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { PET_BY_ID } from '@/lib/game/config/pets'
+import { monsterArt } from '@/lib/game/ui-art'
 import type { LiveBattle } from '@/lib/game/engine/battle'
 import type { GameSave, Quality, RealmNode, RealmRun } from '@/lib/game/types'
 import type { SecretRealmDef } from '@/lib/game/types'
@@ -246,15 +247,7 @@ function monsterName(node: RealmNode): string | undefined {
 
 function monsterPortrait(node: RealmNode): string | undefined {
   const def = node.monsterId ? MONSTER_BY_ID[node.monsterId] : null
-  const byId: Record<string, string> = {
-    boss_shanjun: '/images/boss-xueyan-shanjun.png',
-    boss_yushou_jiang: '/images/boss-shijin-wugong.png',
-    boss_heifeng_daoren: '/images/boss-heifeng-daoren.png',
-    boss_yinshan_gulong: '/images/boss-shijia-dilong.png',
-  }
-  if (node.monsterId && byId[node.monsterId]) return byId[node.monsterId]
-  if (def?.icon === 'beast' || def?.icon === 'wolf') return '/images/boss-black-wolf.png'
-  return undefined
+  return monsterArt(node.monsterId ?? '', def?.icon)
 }
 
 function hudTreasures(save: GameSave, cds: number[]): HudTreasure[] {

@@ -14,6 +14,55 @@ export interface GuestAuthResponse {
   device_id: string
 }
 
+export interface LoginResponse {
+  token: string
+  user_id: number
+  created_at: string
+  is_guest: boolean
+  username: string | null
+  is_admin: boolean
+  /** 该账号云端是否已有存档 */
+  has_save: boolean
+}
+
+export interface RegisterResponse {
+  token: string
+  user_id: number
+  username: string
+  created_at: string
+  is_admin: boolean
+  has_save: boolean
+}
+
+export interface MeResponse {
+  user_id: number
+  username: string | null
+  is_guest: boolean
+  is_admin: boolean
+  created_at: string
+  providers: string[]
+}
+
+export type BoardKey = 'stage' | 'power' | 'realm'
+
+export interface LeaderboardEntry {
+  rank: number
+  name: string
+  user_id: number
+  is_self: boolean
+  value: number
+  detail: string
+  is_admin: boolean
+}
+
+export interface LeaderboardResponse {
+  board: BoardKey
+  entries: LeaderboardEntry[]
+  me: LeaderboardEntry | null
+  total: number
+  updated_at: string
+}
+
 export interface SaveGetResponse {
   save: unknown
   version: number
@@ -107,6 +156,34 @@ export function guestLogin(deviceId: string): Promise<GuestAuthResponse> {
   return apiFetch<GuestAuthResponse>('/auth/guest', {
     method: 'POST',
     body: { device_id: deviceId },
+  })
+}
+
+export function registerAccount(username: string, password: string): Promise<RegisterResponse> {
+  return apiFetch<RegisterResponse>('/auth/register', {
+    method: 'POST',
+    body: { username, password },
+  })
+}
+
+export function passwordLogin(username: string, password: string): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/auth/login', {
+    method: 'POST',
+    body: { provider: 'password', credential: username, password },
+  })
+}
+
+export function fetchMe(token: string): Promise<MeResponse> {
+  return apiFetch<MeResponse>('/auth/me', { token })
+}
+
+export function fetchLeaderboard(
+  board: BoardKey,
+  limit = 50,
+  token?: string | null,
+): Promise<LeaderboardResponse> {
+  return apiFetch<LeaderboardResponse>(`/leaderboard?board=${board}&limit=${limit}`, {
+    token: token ?? undefined,
   })
 }
 

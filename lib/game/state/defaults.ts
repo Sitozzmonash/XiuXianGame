@@ -6,6 +6,7 @@
 import { NPCS } from '../config/story'
 import { rollEquipment } from '../config/equipment'
 import { KARMA_LABEL, type GameSave, type KarmaKey, type SpiritRoot } from '../types'
+import { localDayIndex } from '../utils'
 
 export const SAVE_VERSION = 1
 export const STORAGE_KEY = 'fanchen-wendao-save'
@@ -96,6 +97,13 @@ export function createNewSave(now = Date.now(), rng: () => number = Math.random)
     karma,
     realmRun: null,
     idle: { lastClaim: now },
+    welfare: {
+      // 用「昨天」作为初始值：新号当天即可签到，且首签不计入连续天数
+      lastSignInDay: localDayIndex(now) - 1,
+      streak: 0,
+      totalSignIns: 0,
+      claimedPlaytime: [],
+    },
     stats: {
       kills: 0,
       elites: 0,

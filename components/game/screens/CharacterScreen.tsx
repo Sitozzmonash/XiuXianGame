@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Lock, Plus, Sparkles, Swords } from 'lucide-react'
+import { Layers, Lock, Plus, Sparkles, Swords } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   EQUIP_SLOTS,
@@ -13,6 +13,7 @@ import {
   type SpiritRootQuality,
 } from '@/lib/game/types'
 import { flatStage } from '@/lib/game/config/realms'
+import { equipArt } from '@/lib/game/ui-art'
 import { playerCombatant } from '@/lib/game/engine/battle'
 import { useGameStore } from '@/lib/game/state/store'
 import { power } from '@/lib/game/state/selectors'
@@ -70,6 +71,7 @@ function EquipSlotButton({
   onClick: (target: SlotTarget) => void
 }) {
   const q = slot.view ? qualityView(slot.view.quality) : null
+  const art = equipArt(slot.id)
   return (
     <button
       type="button"
@@ -93,7 +95,11 @@ function EquipSlotButton({
     >
       {slot.view ? (
         <>
-          <GameIcon name={slot.view.icon} className="size-6 text-cream" strokeWidth={1.4} />
+          {art ? (
+            <img src={art} alt="" className="size-9 object-contain drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]" />
+          ) : (
+            <GameIcon name={slot.view.icon} className="size-6 text-cream" strokeWidth={1.4} />
+          )}
           <span className="absolute left-0.5 top-0.5 rounded-[3px] bg-ink-950/85 px-1 font-serif text-[9px] leading-[13px] text-gold-200">
             {slot.view.level}
           </span>
@@ -141,9 +147,11 @@ function InfoRow({
 export function CharacterScreen({
   onBack,
   onSelectSlot,
+  onOpenBuild,
 }: {
   onBack: () => void
   onSelectSlot: (slot: SlotTarget) => void
+  onOpenBuild?: () => void
 }) {
   const [tab, setTab] = useState<string>(TABS[0])
   const [hint, setHint] = useState<string | null>(null)
@@ -226,6 +234,12 @@ export function CharacterScreen({
             <Swords className="size-3.5" />
             一键穿戴
           </InkButton>
+          {onOpenBuild && (
+            <InkButton variant="ghost" size="md" className="min-h-[40px]" onClick={onOpenBuild}>
+              <Layers className="size-3.5" />
+              流派方案
+            </InkButton>
+          )}
           {hint && (
             <p className="flex-1 text-[11px] leading-tight text-jade-200">{hint}</p>
           )}

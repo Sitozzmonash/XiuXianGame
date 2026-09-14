@@ -624,3 +624,359 @@ def test_effective_elapsed_clamps_client_clock() -> None:
     assert elapsed == pytest.approx(60.0 + 600.0 + 120.0)
     # 服务端时间更长时以服务端为准
     assert effective_elapsed_seconds(9000.0, 10.0, settings) == pytest.approx(9000.0 + 120.0)
+
+
+# ------------------------------------------------------------------ #
+# /auth/register + /auth/login（站内账号）+ /auth/me
+# ------------------------------------------------------------------ #
+
+
+def register(client: TestClient, username: str, password: str = "pass1234") -> dict:
+    """调 /auth/register 并返回响应 JSON。"""
+    response = client.post("/auth/register", json={"username": username, "password": password})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_register_then_me(client: TestClient) -> None:
+    body = register(client, "yunsong")
+    assert body["username"] == "yunsong"
+    assert body["is_admin"] is False
+
+    me = client.get("/auth/me", headers=headers(body["token"]))
+    assert me.status_code == 200
+    assert me.json()["username"] == "yunsong"
+    assert me.json()["is_guest"] is False
+    assert me.json()["providers"] == []
+
+
+def test_register_rejects_duplicate_username(client: TestClient) -> None:
+    register(client, "yunsong")
+    dup = client.post("/auth/register", json={"username": "yunsong", "password": "pass1234"})
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["code"] == "username_taken"
+
+
+@pytest.mark.parametrize(
+    "username,password,code",
+    [
+        ("ab", "pass1234", "invalid_username"),
+        ("has space", "pass1234", "invalid_username"),
+        ("yunsong", "123", "invalid_password"),
+    ],
+)
+def test_register_validates_input(client: TestClient, username: str, password: str, code: str) -> None:
+    response = client.post("/auth/register", json={"username": username, "password": password})
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == code
+
+
+def test_register_after_guest_does_not_collide_on_device_id(
+    client: TestClient, session_factory: sessionmaker
+) -> None:
+    """回归：注册不能复用游客的 device_id，否则会撞唯一索引被误报成「用户名已占用」。"""
+    guest_body = guest(client, "device-shared")
+    account = register(client, "yunsong")
+
+    session = session_factory()
+    try:
+        me = session.scalar(select(User).where(User.username == "yunsong"))
+        guest_user = session.scalar(select(User).where(User.device_id == "device-shared"))
+        assert me is not None and guest_user is not None
+        assert me.id != guest_user.id
+        assert me.device_id != guest_user.device_id
+    finally:
+        session.close()
+
+    assert account["user_id"] != guest_body["user_id"]
+
+
+def test_password_login_and_wrong_password(client: TestClient) -> None:
+    register(client, "yunsong", "pass1234")
+
+    ok = client.post(
+        "/auth/login",
+        json={"provider": "password", "credential": "yunsong", "password": "pass1234"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["username"] == "yunsong"
+
+    bad = client.post(
+        "/auth/login",
+        json={"provider": "password", "credential": "yunsong", "password": "nope"},
+    )
+    assert bad.status_code == 401
+    assert bad.json()["detail"]["code"] == "bad_credentials"
+
+    # 不存在的用户名与错误密码返回同一错误码，避免枚举账号
+    missing = client.post(
+        "/auth/login",
+        json={"provider": "password", "credential": "nobody", "password": "pass1234"},
+    )
+    assert missing.status_code == 401
+    assert missing.json()["detail"]["code"] == "bad_credentials"
+
+
+def test_password_is_not_stored_in_plaintext(
+    client: TestClient, session_factory: sessionmaker
+) -> None:
+    register(client, "yunsong", "pass1234")
+    session = session_factory()
+    try:
+        user = session.scalar(select(User).where(User.username == "yunsong"))
+        assert user is not None
+        assert user.password_hash and user.password_hash != "pass1234"
+        assert user.password_hash.startswith("$2")  # bcrypt
+    finally:
+        session.close()
+
+
+def test_me_requires_valid_token(client: TestClient) -> None:
+    assert client.get("/auth/me").status_code == 401
+    assert client.get("/auth/me", headers=headers("bad.token.value")).status_code == 401
+
+
+def test_login_reports_has_save(client: TestClient) -> None:
+    """has_save 让客户端跳过注定 404 的探测请求，必须如实反映云端是否有存档。"""
+    account = register(client, "yunsong")
+    assert account["has_save"] is False
+
+    login = client.post(
+        "/auth/login",
+        json={"provider": "password", "credential": "yunsong", "password": "pass1234"},
+    )
+    assert login.status_code == 200
+    assert login.json()["has_save"] is False
+
+    pushed = client.post(
+        "/save",
+        json={"save": make_save(stone=42), "base_version": 0},
+        headers=headers(account["token"]),
+    )
+    assert pushed.status_code == 200
+
+    again = client.post(
+        "/auth/login",
+        json={"provider": "password", "credential": "yunsong", "password": "pass1234"},
+    )
+    assert again.json()["has_save"] is True
+
+
+def test_account_save_is_separate_from_guest(client: TestClient) -> None:
+    """站内账号与游客档互不影响：各自读写自己的云存档。"""
+    guest_body = guest(client, "device-sep")
+    account = register(client, "yunsong")
+
+    pushed = client.post(
+        "/save",
+        json={"save": make_save(stone=777), "base_version": 0},
+        headers=headers(account["token"]),
+    )
+    assert pushed.status_code == 200
+
+    mine = client.get("/save", headers=headers(account["token"]))
+    assert mine.status_code == 200
+    assert mine.json()["save"]["resources"]["stone"] == 777
+
+    # 游客账号仍没有存档
+    assert client.get("/save", headers=headers(guest_body["token"])).status_code == 404
+
+
+# ------------------------------------------------------------------ #
+# /leaderboard 仙缘榜
+# ------------------------------------------------------------------ #
+
+
+def ranked_save(stage: int, power: int, name: str, realm_index: int = 1) -> dict:
+    """带排行摘要的存档（rank 由客户端在上传前写入）。"""
+    save = make_save(max_stage=stage)
+    save["progress"]["maxStage"] = stage
+    save["rank"] = {
+        "name": name,
+        "power": power,
+        "realmIndex": realm_index,
+        "realmLabel": "炼气三层",
+        "stageLabel": f"第 {stage} 关",
+    }
+    return save
+
+
+def push(client: TestClient, token: str, save: dict) -> None:
+    response = client.post("/save", json={"save": save, "base_version": 0}, headers=headers(token))
+    assert response.status_code == 200, response.text
+
+
+def test_leaderboard_orders_by_stage_and_marks_self(client: TestClient) -> None:
+    low = guest(client, "dev-low")
+    high = guest(client, "dev-high")
+    me = guest(client, "dev-me")
+    push(client, low["token"], ranked_save(10, 1000, "小修士"))
+    push(client, high["token"], ranked_save(50, 900, "大修士"))
+    push(client, me["token"], ranked_save(30, 5000, "我自己"))
+
+    response = client.get("/leaderboard?board=stage", headers=headers(me["token"]))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["board"] == "stage"
+    assert [e["name"] for e in body["entries"]] == ["大修士", "我自己", "小修士"]
+    assert [e["rank"] for e in body["entries"]] == [1, 2, 3]
+    assert body["total"] == 3
+    assert body["me"]["rank"] == 2
+    assert body["me"]["is_self"] is True
+    assert sum(1 for e in body["entries"] if e["is_self"]) == 1
+
+
+def test_leaderboard_power_and_realm_boards(client: TestClient) -> None:
+    a = guest(client, "dev-a")
+    b = guest(client, "dev-b")
+    push(client, a["token"], ranked_save(10, 100, "甲", realm_index=1))
+    push(client, b["token"], ranked_save(5, 9999, "乙", realm_index=3))
+
+    power = client.get("/leaderboard?board=power").json()
+    assert [e["name"] for e in power["entries"]] == ["乙", "甲"]
+
+    realm = client.get("/leaderboard?board=realm").json()
+    assert [e["name"] for e in realm["entries"]] == ["乙", "甲"]
+
+
+def test_leaderboard_honours_limit_and_skips_empty_saves(client: TestClient) -> None:
+    tokens = [guest(client, f"dev-{i}")["token"] for i in range(4)]
+    for i, token in enumerate(tokens):
+        push(client, token, ranked_save(i + 1, 0, f"修士{i}"))
+
+    # 只有游客登录、从未上传存档的账号不应占榜位
+    idle = guest(client, "dev-idle")
+    body = client.get("/leaderboard?board=stage&limit=2").json()
+    assert len(body["entries"]) == 2
+    assert body["total"] == 4
+    assert all(e["name"] != f"游客{idle['user_id']}" for e in body["entries"])
+
+
+def test_leaderboard_works_without_token(client: TestClient) -> None:
+    body = client.get("/leaderboard").json()
+    assert body["entries"] == []
+    assert body["me"] is None
+
+
+def test_leaderboard_rejects_unknown_board(client: TestClient) -> None:
+    assert client.get("/leaderboard?board=bogus").status_code == 422
+
+
+# ------------------------------------------------------------------ #
+# 旧库升级：create_all 不会 ALTER，_ensure_columns 必须补上后加的列
+# ------------------------------------------------------------------ #
+
+
+def test_ensure_columns_upgrades_legacy_users_table(tmp_path, monkeypatch) -> None:
+    """模拟线上已存在的旧表（Neon）：建表语句是加列之前的老版本。"""
+    from sqlalchemy import create_engine, inspect, text
+
+    from app import db as db_module
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE users (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id    VARCHAR(128) UNIQUE,
+                    is_guest     BOOLEAN NOT NULL DEFAULT 1,
+                    created_at   DATETIME NOT NULL,
+                    last_seen_at DATETIME NOT NULL,
+                    trust_score  INTEGER NOT NULL DEFAULT 100
+                )
+                """
+            )
+        )
+        conn.execute(text("INSERT INTO users (device_id, created_at, last_seen_at) VALUES ('old-dev', '2026-01-01', '2026-01-01')"))
+
+    monkeypatch.setattr(db_module, "engine", engine)
+    db_module._ensure_columns()
+
+    columns = {c["name"] for c in inspect(engine).get_columns("users")}
+    assert {"username", "password_hash", "is_admin"} <= columns
+
+    # 旧数据必须原样保留，且新列取到默认值
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT device_id, is_admin FROM users")).one()
+    assert row[0] == "old-dev"
+    assert row[1] in (0, False)
+
+    # 幂等：重复执行不报错
+    db_module._ensure_columns()
+    assert {c["name"] for c in inspect(engine).get_columns("users")} == columns
+    engine.dispose()
+
+
+# ------------------------------------------------------------------ #
+# 测试账号播种
+# ------------------------------------------------------------------ #
+
+
+def test_seed_admin_creates_and_is_idempotent(monkeypatch, session_factory) -> None:
+    from app import seed as seed_module
+
+    monkeypatch.setattr(seed_module, "SessionLocal", session_factory)
+
+    seed_module.seed_admin()
+    session = session_factory()
+    try:
+        admin = session.scalar(select(User).where(User.username == "admin"))
+        assert admin is not None and admin.is_admin is True
+        assert admin.password_hash and admin.password_hash != "admin"
+        admin_id = admin.id
+
+        # 重复播种不新建、不改密码
+        seed_module.seed_admin()
+        again = session.scalar(select(User).where(User.username == "admin"))
+        assert again is not None and again.id == admin_id
+        assert again.password_hash == admin.password_hash
+    finally:
+        session.close()
+
+
+def test_seed_admin_can_be_disabled(monkeypatch, session_factory, settings_overrides) -> None:
+    from app import seed as seed_module
+
+    monkeypatch.setattr(seed_module, "SessionLocal", session_factory)
+    settings_overrides(seed_admin_enabled=False)
+
+    seed_module.seed_admin()
+    session = session_factory()
+    try:
+        assert session.scalar(select(User).where(User.username == "admin")) is None
+    finally:
+        session.close()
+
+
+def test_seeded_admin_can_log_in(monkeypatch, session_factory) -> None:
+    """admin/admin 能真的登进来 —— 这是交付给用户的测试账号。"""
+    from app import seed as seed_module
+
+    monkeypatch.setattr(seed_module, "SessionLocal", session_factory)
+    seed_module.seed_admin()
+
+    def override_get_db() -> Generator[Session, None, None]:
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        # 不用 with：避免触发 lifespan 里的 init_db 去动本机 sqlite 文件；
+        # 播种已在上面显式调用
+        local_client = TestClient(app)
+        response = local_client.post(
+            "/auth/login",
+            json={"provider": "password", "credential": "admin", "password": "admin"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["is_admin"] is True
+
+        me = local_client.get("/auth/me", headers=headers(response.json()["token"]))
+        assert me.json()["is_admin"] is True
+    finally:
+        app.dependency_overrides.clear()

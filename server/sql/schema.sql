@@ -8,13 +8,23 @@ BEGIN;
 
 -- 账号（游客与绑定后正式账号同一行，绑定不丢档）
 CREATE TABLE IF NOT EXISTS users (
-    id           BIGSERIAL   PRIMARY KEY,
-    device_id    VARCHAR(128) UNIQUE,
-    is_guest     BOOLEAN     NOT NULL DEFAULT TRUE,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    trust_score  INTEGER     NOT NULL DEFAULT 100
+    id            BIGSERIAL   PRIMARY KEY,
+    device_id     VARCHAR(128) UNIQUE,
+    username      VARCHAR(64) UNIQUE,                       -- 站内账号登录名（游客为 NULL）
+    password_hash VARCHAR(255),                             -- bcrypt 哈希；绝不落明文
+    is_admin      BOOLEAN     NOT NULL DEFAULT FALSE,        -- 测试 / 运营账号标记
+    is_guest      BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    trust_score   INTEGER     NOT NULL DEFAULT 100
 );
+
+-- 已有库升级：应用启动时会自动补列（app/db.py::_ensure_columns，幂等且只加不删），
+-- 若要手工执行，等价于：
+--   ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(64);
+--   ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+--   ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+--   CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username);
 
 -- 第三方凭证绑定（只存哈希 + 掩码，禁止明文）
 CREATE TABLE IF NOT EXISTS auth_accounts (

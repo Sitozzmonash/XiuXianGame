@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { PET_BY_ID } from '@/lib/game/config/pets'
 import { qualityRank } from '@/lib/game/ui-tokens'
+import { monsterArt } from '@/lib/game/ui-art'
 import { useGameStore } from '@/lib/game/state/store'
 import { playBattleEventSfx, playSfx } from '@/lib/game/audio'
 import { stageView } from '@/lib/game/state/selectors'
@@ -350,17 +351,7 @@ function dropsToView(drops: Drop[]): BattleDropView[] {
 }
 
 function portraitForMonster(id: string, icon: string): string | undefined {
-  const byId: Record<string, string> = {
-    boss_shanjun: '/images/boss-xueyan-shanjun.png',
-    boss_yushou_jiang: '/images/boss-shijin-wugong.png',
-    boss_heifeng_daoren: '/images/boss-heifeng-daoren.png',
-    boss_yinshan_gulong: '/images/boss-shijia-dilong.png',
-    mob_shanlang: '/images/boss-black-wolf.png',
-    mob_heifeng_lang: '/images/boss-black-wolf.png',
-  }
-  if (byId[id]) return byId[id]
-  if (icon === 'beast' || icon === 'wolf') return '/images/boss-black-wolf.png'
-  return undefined
+  return monsterArt(id, icon)
 }
 
 function chapterLabel(chapter: number): string {

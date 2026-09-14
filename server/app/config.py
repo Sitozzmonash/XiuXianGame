@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     max_save_bytes: int = 1024 * 1024
     snapshot_keep: int = 10
 
+    # ---- 测试账号（启动时幂等播种；已存在则不覆盖） ----
+    seed_admin_enabled: bool = True
+    seed_admin_username: str = "admin"
+    seed_admin_password: str = "admin"
+
     # ---- 埋点（PRD 49） ----
     analytics_max_batch: int = 500
     analytics_max_props_bytes: int = 8192

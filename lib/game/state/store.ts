@@ -12,7 +12,20 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 
-import { MAPS, MONSTER_BY_ID, TREASURE_BY_ID, TECHNIQUE_BY_ID, NPC_BY_ID, getStage, globalToMap } from '../config'
+import {
+  MAPS,
+  MARKET_GOODS,
+  MONSTER_BY_ID,
+  PLAY_TIME_MILESTONES,
+  TREASURE_BY_ID,
+  TECHNIQUE_BY_ID,
+  NPC_BY_ID,
+  getStage,
+  globalToMap,
+  signInReward,
+  signInState,
+  welfareScale,
+} from '../config'
 import { rollEquipment } from '../config/equipment'
 import { TREASURES } from '../config/treasures'
 import { TECHNIQUES } from '../config/techniques'
@@ -63,7 +76,7 @@ import {
   type EffectBundle,
 } from '../engine/story'
 import { PILL_BY_ID } from '../config/pills'
-import { makeRng, uid } from '../utils'
+import { localDayIndex, makeRng, uid } from '../utils'
 import {
   QUALITY_ORDER,
   type Drop,
@@ -85,6 +98,13 @@ import { SAVE_VERSION, STORAGE_KEY, createNewSave, migrateSave } from './default
 /* ------------------------------ 常量与工具 ------------------------------ */
 
 export const MAX_STAGE = MAPS.reduce((n, m) => n + m.stages.length, 0)
+
+/** 法宝升级上限与灵石消耗；UI 与结算共用同一公式，避免两处数值漂移 */
+export const TREASURE_MAX_LEVEL = 30
+
+export function treasureUpgradeCost(level: number): number {
+  return Math.round(120 * (level + 1) ** 1.4)
+}
 export const ACTIVE_LOADOUT_FLAG = 'loadout_active'
 
 const clone = <T,>(v: T): T =>
@@ -454,6 +474,38 @@ export interface GameStore {
   setSpeed: (n: number) => void
   setSfx: (v: boolean) => void
   setQuality: (q: GameSave['settings']['quality']) => void
+
+  /* 福利：每日签到 + 累计在线里程碑 */
+  signIn: () => SignInResult | null
+  claimPlaytime: (minutes: number) => boolean
+
+  /* 坊市 */
+  buyGood: (goodId: string, times?: number) => BuyResult
+
+  /* 测试工具（仅 is_admin 账号在设置页可见） */
+  adminGrant: (kind: 'stone' | 'cultivation' | 'immortalJade', amount: number) => void
+  adminJumpTo: (stage: number) => boolean
+}
+
+export interface SignInResult {
+  day: number
+  streak: number
+  stone: number
+  cultivation: number
+  immortalJade: number
+  materials: Record<string, number>
+  pills: Record<string, number>
+  /** 本次奖励的关卡放大系数 */
+  scale: number
+}
+
+export interface BuyResult {
+  ok: boolean
+  reason?: string
+  /** 实付灵石 */
+  cost?: number
+  /** 实际到手的数量 */
+  count?: number
 }
 
 /* ------------------------------ store ------------------------------ */
@@ -1027,8 +1079,8 @@ export const useGameStore = create<GameStore>()(
         upgradeTreasure: (defId) => {
           const s0 = get().save
           const inst = s0.combat.ownedTreasures.find((t) => t.defId === defId)
-          if (!inst || inst.level >= 30) return false
-          const cost = Math.round(120 * (inst.level + 1) ** 1.4)
+          if (!inst || inst.level >= TREASURE_MAX_LEVEL) return false
+          const cost = treasureUpgradeCost(inst.level)
           if (s0.resources.stone < cost) return false
           mutate((s) => {
             const t = s.combat.ownedTreasures.find((x) => x.defId === defId)
@@ -1314,6 +1366,113 @@ export const useGameStore = create<GameStore>()(
         setSpeed: (n) => mutate((s) => { s.settings.speed = Math.min(3, Math.max(1, Math.round(n))) }),
         setSfx: (v) => mutate((s) => { s.settings.sfx = v }),
         setQuality: (q) => mutate((s) => { s.settings.quality = q }),
+
+        /* ------------------------------ 福利 ------------------------------ */
+
+        signIn: () => {
+          const today = localDayIndex()
+          const before = get().save
+          const state = signInState(before.welfare, today)
+          if (!state.claimable) return null
+
+          const reward = signInReward(state.day)
+          const scale = welfareScale(before.progress.maxStage)
+          const stone = Math.round((reward.stone ?? 0) * scale)
+          const cultivation = Math.round((reward.cultivation ?? 0) * scale)
+          const immortalJade = reward.immortalJade ?? 0
+          const materials = reward.materials ?? {}
+          const pills = reward.pills ?? {}
+
+          mutate((s) => {
+            s.welfare.lastSignInDay = today
+            s.welfare.streak = state.streakAfter
+            s.welfare.totalSignIns += 1
+            s.resources.stone += stone
+            s.resources.immortalJade += immortalJade
+            s.profile.cultivation += cultivation
+            for (const [id, n] of Object.entries(materials)) {
+              s.inventory.materials[id] = (s.inventory.materials[id] ?? 0) + n
+            }
+            for (const [id, n] of Object.entries(pills)) {
+              s.inventory.pills[id] = (s.inventory.pills[id] ?? 0) + n
+            }
+            const parts = [`灵石 +${stone}`, `修为 +${cultivation}`]
+            if (immortalJade) parts.push(`仙玉 +${immortalJade}`)
+            pushLog(s, `每日签到（第 ${state.day} 天）：${parts.join('，')}。`, 'reward')
+          })
+
+          return { day: state.day, streak: state.streakAfter, stone, cultivation, immortalJade, materials, pills, scale }
+        },
+
+        claimPlaytime: (minutes) => {
+          const save = get().save
+          const milestone = PLAY_TIME_MILESTONES.find((m) => m.minutes === minutes)
+          if (!milestone) return false
+          if (save.welfare.claimedPlaytime.includes(minutes)) return false
+          if (save.stats.playTime < milestone.minutes * 60) return false
+
+          const scale = welfareScale(save.progress.maxStage)
+          mutate((s) => {
+            s.welfare.claimedPlaytime.push(minutes)
+            s.resources.stone += Math.round(milestone.stone * scale)
+            s.resources.immortalJade += milestone.immortalJade
+            s.profile.cultivation += Math.round(milestone.cultivation * scale)
+            pushLog(s, `在线奖励「${milestone.label}」已领取。`, 'reward')
+          })
+          return true
+        },
+
+        /* ------------------------------ 坊市 ------------------------------ */
+
+        buyGood: (goodId, times = 1) => {
+          const good = MARKET_GOODS.find((g) => g.id === goodId)
+          if (!good) return { ok: false, reason: '坊市里没有这件东西' }
+          const count = Math.max(1, Math.floor(times))
+          const save = get().save
+          if (save.progress.maxStage < good.unlockStage) {
+            return { ok: false, reason: `通关第 ${good.unlockStage} 关后开放` }
+          }
+          const cost = good.price * count
+          if (save.resources.stone < cost) return { ok: false, reason: '灵石不足' }
+
+          const amount = good.bundle * count
+          mutate((s) => {
+            s.resources.stone -= cost
+            if (good.kind === 'pill') {
+              s.inventory.pills[good.refId] = (s.inventory.pills[good.refId] ?? 0) + amount
+            } else {
+              s.inventory.materials[good.refId] = (s.inventory.materials[good.refId] ?? 0) + amount
+            }
+          })
+          return { ok: true, cost, count: amount }
+        },
+
+        /* ------------------------------ 测试工具 ------------------------------ */
+
+        adminGrant: (kind, amount) =>
+          mutate((s) => {
+            if (kind === 'stone') s.resources.stone += amount
+            else if (kind === 'immortalJade') s.resources.immortalJade += amount
+            else s.profile.cultivation += amount
+          }),
+
+        adminJumpTo: (stage) => {
+          const target = Math.floor(stage)
+          if (!Number.isFinite(target) || target < 1 || target > MAX_STAGE) return false
+          const view = globalToMap(target)
+          mutate((s) => {
+            s.progress.maxStage = Math.max(s.progress.maxStage, target)
+            s.progress.stage = target
+            s.progress.mapId = view.map.id
+            s.progress.mapStage = view.mapStage
+            s.progress.stableStage = target
+            s.progress.mapProgress[view.map.id] = Math.max(
+              s.progress.mapProgress[view.map.id] ?? 1,
+              view.mapStage,
+            )
+          })
+          return true
+        },
       }
     },
     {

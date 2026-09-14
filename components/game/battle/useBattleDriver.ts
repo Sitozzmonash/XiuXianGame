@@ -84,12 +84,22 @@ export function useBattleDriver({
   const onFinishRef = useRef(onFinish)
   const onSkipRef = useRef(onSkip)
   const damageRef = useRef(0)
-  const enemyDamageRef = useRef(0)
 
   autoRef.current = auto
   speedRef.current = speed
   onFinishRef.current = onFinish
   onSkipRef.current = onSkip
+
+  /** 收事件入缓冲，同时累计玩家打出的总伤害（结算面板的「总伤害」） */
+  const collect = useCallback((produced: BattleEvent[]) => {
+    if (!produced.length) return
+    bufferRef.current.push(...produced)
+    for (const e of produced) {
+      if ((e.type === 'hit' || e.type === 'crit') && e.to === 'enemy' && typeof e.value === 'number') {
+        damageRef.current += e.value
+      }
+    }
+  }, [])
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -129,7 +139,6 @@ export function useBattleDriver({
     accRef.current = 0
     lastRef.current = 0
     damageRef.current = 0
-    enemyDamageRef.current = 0
     bufferRef.current = []
     setResult(null)
     setSettling(false)
@@ -147,8 +156,7 @@ export function useBattleDriver({
         accRef.current += dt
         let steps = 0
         while (accRef.current >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
-          const produced = battle.tick(FIXED_DT)
-          if (produced.length) bufferRef.current.push(...produced)
+          collect(battle.tick(FIXED_DT))
           accRef.current -= FIXED_DT
           steps++
         }
@@ -178,7 +186,7 @@ export function useBattleDriver({
 
     rafRef.current = requestAnimationFrame(loop)
     return stopLoop
-  }, [battle, buildResult, stopLoop])
+  }, [battle, buildResult, collect, stopLoop])
 
   useEffect(() => () => stopLoop(), [stopLoop])
 
@@ -187,8 +195,7 @@ export function useBattleDriver({
     if (!battle || finishedRef.current) return
     let guard = 0
     while (!battle.state.done && guard < 20000) {
-      const produced = battle.tick(FIXED_DT * 4)
-      if (produced.length) bufferRef.current.push(...produced)
+      collect(battle.tick(FIXED_DT * 4))
       guard++
     }
     if (!battle.state.done) battle.tick(120)
@@ -199,7 +206,7 @@ export function useBattleDriver({
     setEvents(bufferRef.current.slice())
     const info = buildResult(battle)
     onSkipRef.current?.(info)
-  }, [battle, buildResult])
+  }, [battle, buildResult, collect])
 
   return useMemo(
     () => ({

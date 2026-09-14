@@ -6,7 +6,7 @@
 
 from collections.abc import Generator
 
-from sqlalchemy import BigInteger, Integer, create_engine
+from sqlalchemy import BigInteger, Integer, create_engine, inspect, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -51,10 +51,40 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def init_db() -> None:
-    """建表（幂等）；生产建议改用 sql/schema.sql 或迁移工具管理。"""
+    """建表 + 补列（均幂等）；生产建议改用 sql/schema.sql 或迁移工具管理。"""
     from app import models  # noqa: F401  确保模型注册进 metadata
 
     Base.metadata.create_all(bind=engine)
+    _ensure_columns()
+
+
+def _ensure_columns() -> None:
+    """给「已存在的旧表」补齐后加的列。
+
+    create_all 只建缺失的表、不会 ALTER，所以线上先建过表的库（如 Neon）
+    拿不到 User.username / password_hash / is_admin。这里按方言显式补列，
+    只加不删不改，重复执行安全。
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("users"):
+        return
+    existing = {col["name"] for col in inspector.get_columns("users")}
+    is_sqlite = engine.dialect.name == "sqlite"
+    additions = {
+        "username": "VARCHAR(64)",
+        "password_hash": "VARCHAR(255)",
+        "is_admin": "BOOLEAN NOT NULL DEFAULT 0" if is_sqlite else "BOOLEAN NOT NULL DEFAULT FALSE",
+    }
+    pending = [f"ADD COLUMN {name} {ddl}" for name, ddl in additions.items() if name not in existing]
+    if not pending:
+        return
+    with engine.begin() as conn:
+        for clause in pending:
+            conn.execute(text(f"ALTER TABLE users {clause}"))
+        # username 需要唯一索引才能保证注册不重名；SQLite / PostgreSQL 都支持 IF NOT EXISTS
+        conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username)")
+        )
 
 
 def get_db() -> Generator[Session, None, None]:

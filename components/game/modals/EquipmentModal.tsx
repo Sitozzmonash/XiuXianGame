@@ -8,6 +8,7 @@ import {
   type EquipSlotId,
 } from '@/lib/game/types'
 import { useGameStore } from '@/lib/game/state/store'
+import { equipArt } from '@/lib/game/ui-art'
 import { formatNumber } from '@/lib/game/utils'
 import { GameModal } from '../GameModal'
 import { GameIcon } from '../GameIcon'
@@ -167,7 +168,11 @@ export function EquipmentModal({
           className="flex size-16 shrink-0 items-center justify-center rounded-md bg-gradient-to-b from-ink-800 to-ink-950"
           style={{ boxShadow: `inset 0 0 0 1.5px ${q.ring}, 0 0 16px ${q.glow}` }}
         >
-          <GameIcon name={view.icon} className="size-8 text-cream" />
+          {equipArt(view.icon) ? (
+            <img src={equipArt(view.icon)} alt="" className="size-14 object-contain p-0.5" />
+          ) : (
+            <GameIcon name={view.icon} className="size-8 text-cream" />
+          )}
         </span>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">

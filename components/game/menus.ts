@@ -18,16 +18,16 @@ export interface MenuEntry {
 }
 
 export const LeftMenu: MenuEntry[] = [
-  { id: 'quest', label: '任务', icon: 'scroll', screen: 'dungeon', redDot: true },
-  { id: 'welfare', label: '福利', icon: 'gift', screen: 'sect', redDot: true },
-  { id: 'activity', label: '活动', icon: 'flame', screen: 'dungeon', redDot: true },
+  { id: 'realm-explore', label: '秘境', icon: 'array', screen: 'dungeon' },
+  { id: 'welfare', label: '福利', icon: 'gift', screen: 'welfare', redDot: true },
+  { id: 'sect', label: '宗门', icon: 'gate', screen: 'sect' },
   { id: 'fate', label: '仙缘', icon: 'lotus', screen: 'ranking' },
 ]
 
 export const RightMenu: MenuEntry[] = [
-  { id: 'map', label: '地图', icon: 'map', screen: 'home' },
+  { id: 'map', label: '地图', icon: 'map', screen: 'map' },
   { id: 'role', label: '角色', icon: 'user', screen: 'character' },
-  { id: 'artifact', label: '法宝', icon: 'vase', screen: 'build' },
+  { id: 'artifact', label: '法宝', icon: 'vase', screen: 'treasures' },
   { id: 'technique', label: '功法', icon: 'sword', screen: 'techniques' },
-  { id: 'market', label: '坊市', icon: 'shop', screen: 'sect', redDot: true },
+  { id: 'market', label: '坊市', icon: 'shop', screen: 'market', redDot: true },
 ]

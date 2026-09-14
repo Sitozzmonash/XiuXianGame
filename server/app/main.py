@@ -17,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.db import init_db
 from app.models import iso_utc, utcnow
-from app.routers import analytics, auth, save
+from app.routers import analytics, auth, leaderboard, save
+from app.seed import seed_admin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fanchen")
@@ -25,8 +26,9 @@ logger = logging.getLogger("fanchen")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """启动时建表（幂等）；生产可改用 sql/schema.sql 或迁移工具。"""
+    """启动时建表 + 播种测试账号（均幂等）；生产可改用 sql/schema.sql 或迁移工具。"""
     init_db()
+    seed_admin()
     logger.info("database ready: %s", get_settings().database_url.split("@")[-1])
     yield
 
@@ -54,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix=prefix)
     app.include_router(save.router, prefix=prefix)
     app.include_router(analytics.router, prefix=prefix)
+    app.include_router(leaderboard.router, prefix=prefix)
 
     @app.get(f"{prefix}/health", tags=["meta"])
     def health() -> dict[str, str]:

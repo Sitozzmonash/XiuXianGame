@@ -1,9 +1,11 @@
 'use client'
 
+import { useMemo } from 'react'
 import Image from 'next/image'
 import { Check, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { REALMS } from '@/lib/game/config/realms'
+import { canBreakthrough } from '@/lib/game/engine/breakthrough'
 import { InkButton, StatBar } from './primitives'
 import { useGameStore } from '@/lib/game/state/store'
 import { cultivationProgress } from '@/lib/game/state/selectors'
@@ -57,7 +59,9 @@ export function RealmProgress({
   className?: string
 }) {
   const save = useGameStore((s) => s.save)
-  const check = useGameStore((s) => s.canBreakthrough())
+  // 必须在 useMemo 里算：canBreakthrough 每次返回新对象，
+  // 直接当 selector 会让 useSyncExternalStore 每帧拿到新引用 → 无限重渲染而崩页
+  const check = useMemo(() => canBreakthrough(save), [save])
   const prog = cultivationProgress(save)
 
   const currentIndex = REALMS.findIndex((r) => r.id === save.profile.realmId)

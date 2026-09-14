@@ -1,8 +1,10 @@
-"""登录 / 绑定路由（PRD 3.3、43；B13 多端登录）。
+"""登录 / 注册 / 绑定路由（PRD 3.3、43；B13 多端登录）。
 
-- POST /auth/guest  游客登录（device_id 幂等复用）
-- POST /auth/bind   游客绑定微信 / QQ / 邮箱（绑定后存档不丢：存档挂在 user_id 上）
-- POST /auth/login  用已绑定凭证登录
+- POST /auth/guest     游客登录（device_id 幂等复用）
+- POST /auth/register  注册站内账号（用户名 + 密码）
+- POST /auth/login     登录：provider='password' 走站内账号，其余用已绑定第三方凭证
+- POST /auth/bind      游客绑定微信 / QQ / 邮箱（绑定后存档不丢：存档挂在 user_id 上）
+- GET  /auth/me        当前账号信息（客户端启动时校验 token）
 """
 
 import secrets
@@ -13,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import commit_or_rollback, get_db
-from app.models import AuthAccount, User, iso_utc, utcnow
+from app.models import AuthAccount, PlayerSave, User, iso_utc, utcnow
 from app.schemas import (
     BindRequest,
     BindResponse,
@@ -21,15 +23,22 @@ from app.schemas import (
     GuestResponse,
     LoginRequest,
     LoginResponse,
+    MeResponse,
+    RegisterRequest,
+    RegisterResponse,
 )
 from app.security import (
     check_email_code,
     create_access_token,
     credential_fingerprint,
     get_current_user,
+    hash_credential,
     is_valid_email,
+    is_valid_password,
+    is_valid_username,
     mask_credential,
     normalize_credential,
+    verify_credential,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,6 +47,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def _new_device_id() -> str:
     """客户端未提供 device_id 时生成一个，随响应返回由客户端持久化。"""
     return "dev_" + secrets.token_hex(8)
+
+
+def _has_save(session: Session, user_id: int) -> bool:
+    """该账号云端是否已有存档（主键查询，用于让客户端跳过注定 404 的探测）。"""
+    return session.get(PlayerSave, user_id) is not None
 
 
 @router.post("/guest", response_model=GuestResponse)
@@ -154,9 +168,64 @@ def bind_account(
     )
 
 
+@router.post("/register", response_model=RegisterResponse)
+def register(payload: RegisterRequest, session: Session = Depends(get_db)) -> RegisterResponse:
+    """注册站内账号：用户名唯一，密码只存 bcrypt 哈希；注册即登录。
+
+    device_id 不与游客共用：它标识的是「这台设备的游客身份」，已被游客档占用；
+    新账号分配独立 device_id，否则会撞 users.device_id 的唯一索引。
+    """
+    username = payload.username.strip()
+    if not is_valid_username(username):
+        raise HTTPException(
+            400,
+            detail={"code": "invalid_username", "message": "用户名需为 3~20 位中英文、数字或下划线"},
+        )
+    if not is_valid_password(payload.password):
+        raise HTTPException(
+            400,
+            detail={"code": "invalid_password", "message": "密码长度需为 4~64 位"},
+        )
+
+    taken = session.scalar(select(User).where(User.username == username))
+    if taken is not None:
+        raise HTTPException(409, detail={"code": "username_taken", "message": "该用户名已被占用"})
+
+    now = utcnow()
+    user = User(
+        device_id=_new_device_id(),
+        username=username,
+        password_hash=hash_credential(payload.password),
+        is_guest=False,
+        is_admin=False,
+        created_at=now,
+        last_seen_at=now,
+        trust_score=100,
+    )
+    session.add(user)
+    try:
+        session.commit()
+    except IntegrityError:
+        # 并发下同一用户名撞唯一索引
+        session.rollback()
+        raise HTTPException(409, detail={"code": "username_taken", "message": "该用户名已被占用"}) from None
+
+    return RegisterResponse(
+        token=create_access_token(user.id, user.device_id),
+        user_id=user.id,
+        username=username,
+        created_at=iso_utc(user.created_at),
+        is_admin=user.is_admin,
+        has_save=False,
+    )
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, session: Session = Depends(get_db)) -> LoginResponse:
-    """用已绑定凭证登录（邮箱需带验证码），返回全新 token 与账号信息。"""
+    """登录：provider='password' 校验用户名 + 密码；其余用已绑定凭证（邮箱需带验证码）。"""
+    if payload.provider == "password":
+        return _password_login(payload, session)
+
     credential = normalize_credential(payload.provider, payload.credential)
 
     if payload.provider == "email":
@@ -189,4 +258,49 @@ def login(payload: LoginRequest, session: Session = Depends(get_db)) -> LoginRes
         user_id=user.id,
         created_at=iso_utc(user.created_at),
         is_guest=user.is_guest,
+        username=user.username,
+        is_admin=user.is_admin,
+        has_save=_has_save(session, user.id),
+    )
+
+
+def _password_login(payload: LoginRequest, session: Session) -> LoginResponse:
+    """站内账号登录；用户名不存在与密码错误返回同一错误码，避免枚举用户名。"""
+    username = payload.credential.strip()
+    user = session.scalar(select(User).where(User.username == username))
+    if user is None or not user.password_hash or not payload.password:
+        raise HTTPException(401, detail={"code": "bad_credentials", "message": "用户名或密码错误"})
+    if not verify_credential(payload.password, user.password_hash):
+        raise HTTPException(401, detail={"code": "bad_credentials", "message": "用户名或密码错误"})
+
+    user.last_seen_at = utcnow()
+    commit_or_rollback(session)
+
+    return LoginResponse(
+        token=create_access_token(user.id, user.device_id),
+        user_id=user.id,
+        created_at=iso_utc(user.created_at),
+        is_guest=False,
+        username=user.username,
+        is_admin=user.is_admin,
+        has_save=_has_save(session, user.id),
+    )
+
+
+@router.get("/me", response_model=MeResponse)
+def me(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> MeResponse:
+    """当前账号信息；token 失效时由 get_current_user 返回 401，客户端据此回登录页。"""
+    providers = [
+        row for row in session.scalars(select(AuthAccount.provider).where(AuthAccount.user_id == user.id))
+    ]
+    return MeResponse(
+        user_id=user.id,
+        username=user.username,
+        is_guest=user.is_guest,
+        is_admin=user.is_admin,
+        created_at=iso_utc(user.created_at),
+        providers=providers,
     )

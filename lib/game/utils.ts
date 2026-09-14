@@ -82,3 +82,13 @@ export function formatDuration(seconds: number): string {
 }
 
 export const pct = (v: number, digits = 1) => `${(v * 100).toFixed(digits)}%`
+
+/* ------------------------------ 日期 ------------------------------ */
+
+/**
+ * 玩家本地时区下的「日期序号」（自 1970-01-01 起的天数）。
+ * 签到按自然日判定，用本地日期而不是 UTC，跨时区玩家的「今天」才符合直觉。
+ */
+export function localDayIndex(now: number = Date.now()): number {
+  return Math.floor((now - new Date(now).getTimezoneOffset() * 60_000) / 86_400_000)
+}

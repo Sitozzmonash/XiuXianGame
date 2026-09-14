@@ -5,6 +5,7 @@ import type { TreasureDetail } from '@/lib/game/ui-tokens'
 import type { TreasureDef } from '@/lib/game/types'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { useGameStore } from '@/lib/game/state/store'
+import { treasureArt } from '@/lib/game/ui-art'
 import { formatNumber } from '@/lib/game/utils'
 import { GameModal } from '../GameModal'
 import { GameIcon } from '../GameIcon'
@@ -144,7 +145,11 @@ export function TreasureModal({
           className="flex size-16 shrink-0 items-center justify-center rounded-md bg-gradient-to-b from-ink-800 to-ink-950"
           style={{ boxShadow: `inset 0 0 0 1.5px ${q.ring}, 0 0 16px ${q.glow}` }}
         >
-          <GameIcon name={def.icon} className="size-8 text-cream" />
+          {treasureArt(def.icon) ? (
+            <img src={treasureArt(def.icon)} alt="" className="size-14 object-contain p-0.5" />
+          ) : (
+            <GameIcon name={def.icon} className="size-8 text-cream" />
+          )}
         </span>
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex items-center gap-1.5">

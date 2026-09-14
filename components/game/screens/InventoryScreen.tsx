@@ -8,6 +8,7 @@ import { PILL_BY_ID, PILL_CATEGORY_LABEL, type PillDef } from '@/lib/game/config
 import { expandCost, salvageValue } from '@/lib/game/engine/loot'
 import { useGameStore } from '@/lib/game/state/store'
 import { bagSummary } from '@/lib/game/state/selectors'
+import { equipArt, treasureArt } from '@/lib/game/ui-art'
 import { formatNumber } from '@/lib/game/utils'
 import { ScreenFrame, SubHeader } from '../ScreenFrame'
 import { BuildTabs } from '../Tabs'
@@ -46,6 +47,8 @@ interface SheetModel {
   name: string
   quality: Quality
   icon: string
+  /** 装备部位立绘；缺省时用矢量图标 */
+  art?: string
   desc: string
   meta: string[]
   action?: { label: string; disabled: boolean; note?: string; run: () => void }
@@ -58,6 +61,7 @@ function qualityRank(q: Quality): number {
 
 function BagCell({
   icon,
+  art,
   quality,
   corner,
   badge,
@@ -67,6 +71,8 @@ function BagCell({
   onToggleLock,
 }: {
   icon: string
+  /** 部位立绘；缺省时回落到矢量图标 */
+  art?: string
   quality: Quality
   corner?: string
   badge?: string
@@ -94,6 +100,13 @@ function BagCell({
         <span className="absolute inset-0 flex items-center justify-center">
           <GameIcon name={icon} className="size-7 text-cream" strokeWidth={1.4} />
         </span>
+        {art && (
+          <img
+            src={art}
+            alt=""
+            className="absolute inset-1.5 object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.75)]"
+          />
+        )}
         {corner && (
           <span className="absolute left-0.5 top-0.5 rounded-[3px] bg-ink-950/85 px-1 font-serif text-[9px] leading-[13px] text-gold-200">
             {corner}
@@ -233,6 +246,7 @@ export function InventoryScreen({
       name: t.name,
       quality: t.quality,
       icon: t.icon,
+      art: treasureArt(t.icon),
       desc: t.desc,
       meta: [
         `法宝 · ${t.kindLabel}`,
@@ -288,6 +302,7 @@ export function InventoryScreen({
         <BagCell
           key={e.uid}
           icon={e.icon}
+          art={equipArt(e.icon)}
           quality={e.quality}
           corner={`Lv.${e.level}`}
           badge={e.enhance > 0 ? `+${e.enhance}` : undefined}
@@ -490,7 +505,11 @@ export function InventoryScreen({
                   boxShadow: `inset 0 0 0 1.5px ${qualityView(sheet.quality).ring}, 0 0 16px ${qualityView(sheet.quality).glow}`,
                 }}
               >
-                <GameIcon name={sheet.icon} className="size-7 text-cream" />
+                {sheet.art ? (
+                  <img src={sheet.art} alt="" className="size-12 object-contain" />
+                ) : (
+                  <GameIcon name={sheet.icon} className="size-7 text-cream" />
+                )}
               </span>
               <div className="min-w-0">
                 <p className="truncate font-serif text-sm font-bold text-cream">{sheet.name}</p>

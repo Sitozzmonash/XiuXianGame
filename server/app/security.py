@@ -96,11 +96,26 @@ def mask_credential(provider: str, raw: str) -> str:
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# 用户名：中英文、数字、下划线，3~20 位（中文按字计）
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fa5]{3,20}$")
+
+MIN_PASSWORD_LEN = 4
+MAX_PASSWORD_LEN = 64
 
 
 def is_valid_email(value: str) -> bool:
     """轻量邮箱格式校验（避免引入 email-validator 依赖）。"""
     return bool(_EMAIL_RE.match(value.strip()))
+
+
+def is_valid_username(value: str) -> bool:
+    """用户名格式校验：3~20 位中英文 / 数字 / 下划线。"""
+    return bool(_USERNAME_RE.match(value.strip()))
+
+
+def is_valid_password(value: str) -> bool:
+    """密码长度校验（站内账号；bcrypt 上限 72 字节，这里限 64 字符足够）。"""
+    return MIN_PASSWORD_LEN <= len(value) <= MAX_PASSWORD_LEN
 
 
 def check_email_code(email: str, code: str | None) -> None:

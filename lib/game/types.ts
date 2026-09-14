@@ -588,6 +588,22 @@ export interface LogEntry {
   kind: 'story' | 'reward' | 'system' | 'battle'
 }
 
+/** 仙缘榜排序用的派生摘要（不是游戏数值，仅用于榜单展示）。 */
+export interface RankSummary {
+  /** 游戏内道号 */
+  name: string
+  /** 综合战力（selectors.power 的结果） */
+  power: number
+  /** 大境界序数（0 起，越大越靠前） */
+  realmIndex: number
+  /** 境界展示名，如「炼气三层」 */
+  realmLabel: string
+  /** 关卡展示名，如「青石村 · 第 12 关」 */
+  stageLabel: string
+  /** 最高关卡 */
+  stage: number
+}
+
 export interface GameSave {
   version: number
   createdAt: number
@@ -657,6 +673,22 @@ export interface GameSave {
   idle: {
     lastClaim: number
   }
+  /** 福利：每日签到与累计在线奖励的领取状态 */
+  welfare: {
+    /** 最近一次签到的「本地日期序号」（自 1970 起的天数，按玩家本地时区） */
+    lastSignInDay: number
+    /** 连续签到天数 */
+    streak: number
+    /** 累计签到次数 */
+    totalSignIns: number
+    /** 已领取的累计在线时长里程碑（分钟） */
+    claimedPlaytime: number[]
+  }
+  /**
+   * 仙缘榜排行摘要：推云存档前由客户端写入（见 lib/game/api/cloud.ts），
+   * 服务端只做排序与展示，不参与任何数值结算。
+   */
+  rank?: RankSummary
   stats: {
     kills: number
     elites: number
@@ -675,7 +707,9 @@ export interface GameSave {
   }
 }
 
-/* ------------------------------ 战斗结果 ------------------------------ */
+/* ------------------------------------------------------------------ *
+ * 战斗结果
+ * ------------------------------------------------------------------ */
 
 export interface BattleSideSummary {
   name: string

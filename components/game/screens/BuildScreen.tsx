@@ -5,6 +5,7 @@ import { ArrowLeftRight, Layers, Plus, Save, Shield, Swords } from 'lucide-react
 import { cn } from '@/lib/utils'
 import { QUALITY_ORDER, type TreasureInstance } from '@/lib/game/types'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
+import { treasureArt } from '@/lib/game/ui-art'
 import { useGameStore } from '@/lib/game/state/store'
 import {
   buildScore,
@@ -115,7 +116,11 @@ function TreasureSlotRow({
           className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-gradient-to-b from-ink-800 to-ink-950"
           style={{ boxShadow: `inset 0 0 0 1.5px ${q.ring}, 0 0 10px ${q.glow}` }}
         >
-          <GameIcon name={view.icon} className="size-5 text-cream" />
+          {treasureArt(view.icon) ? (
+            <img src={treasureArt(view.icon)} alt="" className="size-9 object-contain" />
+          ) : (
+            <GameIcon name={view.icon} className="size-5 text-cream" />
+          )}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
@@ -385,7 +390,11 @@ export function BuildScreen({ onBack }: { onBack: () => void }) {
                             className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-gradient-to-b from-ink-800 to-ink-950"
                             style={{ boxShadow: `inset 0 0 0 1.5px ${q.ring}, 0 0 10px ${q.glow}` }}
                           >
-                            <GameIcon name={view.icon} className="size-5 text-cream" />
+                            {treasureArt(view.icon) ? (
+                              <img src={treasureArt(view.icon)} alt="" className="size-9 object-contain" />
+                            ) : (
+                              <GameIcon name={view.icon} className="size-5 text-cream" />
+                            )}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5">
