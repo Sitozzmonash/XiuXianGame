@@ -1,96 +1,92 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FastForward, Home, Pause, Play, RotateCw } from 'lucide-react'
+import { FastForward, Home, LogOut, Pause, Play, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getStage } from '@/lib/game/config'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { PET_BY_ID } from '@/lib/game/config/pets'
-import { QUALITY, type Treasure } from '@/lib/game-data'
+import { QUALITY } from '@/lib/game-data'
+import { useGameStore } from '@/lib/game/state/store'
+import { stageView } from '@/lib/game/state/selectors'
+import { formatNumber } from '@/lib/game/utils'
 import type { GameSave, Quality } from '@/lib/game/types'
+import type { LiveBattle } from '@/lib/game/engine/battle'
 import { GameHeader } from '../GameHeader'
 import { BattleCanvas } from '../battle/BattleCanvas'
 import { BattleHud, type HudTreasure } from '../battle/BattleHud'
 import { BattleResultOverlay, type BattleDropView } from '../battle/BattleResultOverlay'
 import { StageTransition } from '../battle/StageTransition'
-import { useBattleDriver } from '../battle/useBattleDriver'
+import { useBattleDriver, type BattleResultInfo } from '../battle/useBattleDriver'
 import { InkButton } from '../primitives'
+import type { EffectBundle } from '@/lib/game/engine/story'
+import type { Drop } from '@/lib/game/types'
 
 /* ------------------------------------------------------------------ *
  * 战斗页 —— 编排：过场 → 实时战斗 → 结算
- * 状态与结算由外部注入，本页只负责表现与交互
+ * 战斗实例由 store.startBattle 提供，结算走 store.finishBattle
  * ------------------------------------------------------------------ */
 
 export interface BattleScreenProps {
-  /** 存档快照；为 null 时展示空态提示 */
-  save: GameSave | null
-  /** 全局关卡序号 */
-  stage: number
-  onBack: () => void
-  /** 战斗胜利结算后，把结果交回状态层 */
-  onBattleWin: (info: { drops: BattleDropView[]; damage: number; dps: number }) => void
-  onBattleLose: (info: { failReason?: string }) => void
-  /** 通关后进入下一关 */
-  onNextStage: () => void
-  /** 点开某个法宝查看详情 */
-  onOpenTreasure: (t: Treasure) => void
-  /** 跳转洞府 / 主界面 */
+  /** store 创建的战斗实例 */
+  battle: LiveBattle
+  /** 存档快照，用于展示法宝 / 灵兽 / 画质设置 */
+  save: GameSave
+  /** 战斗结束后由 store 结算，返回掉落等结果 */
+  onFinishBattle: (win: boolean, failReason?: string) => BattleFinishView
+  /** 结算完成后离开战斗页 */
   onExit: () => void
+  /** 点开某个法宝查看详情 */
+  onOpenTreasure: (defId: string) => void
+}
+
+export interface BattleFinishView {
+  win: boolean
+  drops: Drop[]
+  stone: number
+  cultivation: number
+  failReason?: string
+  storyPending: string[]
+  /** 秘境节点奖励 */
+  realmBundle?: EffectBundle
 }
 
 /** 战斗时长上限：超时判负，避免拉锯战无限僵持 */
 const TIME_LIMIT = 90
 
 export function BattleScreen({
+  battle,
   save,
-  stage,
-  onBack,
-  onBattleWin,
-  onBattleLose,
-  onNextStage,
-  onOpenTreasure,
+  onFinishBattle,
   onExit,
+  onOpenTreasure,
 }: BattleScreenProps) {
   const [auto, setAuto] = useState(true)
   const [speed, setSpeed] = useState(1)
   const [transition, setTransition] = useState(true)
+  const [finish, setFinish] = useState<BattleFinishView | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 390, height: 640 })
 
-  const stageInfo = useMemo(() => {
+  const view = useMemo(() => {
     try {
-      const { map, stage: st, monster } = getStage(stage)
-      return {
-        chapter: `第${chapterLabel(map.chapter)}章 · ${map.name}`,
-        stageName: st.name,
-        kind: (monster?.kind ?? 'normal') as 'normal' | 'elite' | 'boss',
-        index: `${st.index} / ${map.stages.length}`,
-      }
+      return stageView(save, battle.state ? save.progress.stage : save.progress.stage)
     } catch {
-      return { chapter: '第一章 · 青石村', stageName: '未知之地', kind: 'normal' as const, index: '1 / 50' }
+      return null
     }
-  }, [stage])
+  }, [save])
 
-  const handleFinish = useCallback<NonNullable<Parameters<typeof useBattleDriver>[0]['onFinish']>>(
-    (info) => {
-      if (info.win) {
-        onBattleWin({
-          drops: dropsFromEvents(info.drops),
-          damage: info.damage,
-          dps: info.dps,
-        })
-      } else {
-        onBattleLose({ failReason: info.failReason })
-      }
+  const handleFinish = useCallback(
+    (info: BattleResultInfo) => {
+      const result = onFinishBattle(info.win, info.failReason)
+      setFinish({ ...result, failReason: info.failReason })
     },
-    [onBattleWin, onBattleLose],
+    [onFinishBattle],
   )
 
   const driver = useBattleDriver({
-    save,
-    stage,
-    auto: auto && !transition,
+    battle,
+    auto: auto && !transition && !finish,
     speed,
     onFinish: handleFinish,
   })
@@ -108,13 +104,7 @@ export function BattleScreen({
     return () => ro.disconnect()
   }, [])
 
-  /* 进入关卡时先播过场，过场结束再开打 */
-  useEffect(() => {
-    setTransition(true)
-  }, [stage])
-
   const treasures = useMemo<HudTreasure[]>(() => {
-    if (!save) return []
     const out: HudTreasure[] = []
     save.combat.activeTreasures.forEach((id, slotIndex) => {
       if (!id) return
@@ -130,10 +120,9 @@ export function BattleScreen({
       })
     })
     return out
-  }, [save, driver.state?.skillCds])
+  }, [save.combat.activeTreasures, driver.state?.skillCds])
 
   const passives = useMemo(() => {
-    if (!save) return []
     const out: { id: string; name: string; icon: string }[] = []
     for (const id of save.combat.passiveTreasures) {
       if (!id) continue
@@ -141,10 +130,10 @@ export function BattleScreen({
       if (def) out.push({ id: def.id, name: def.name, icon: def.icon })
     }
     return out
-  }, [save])
+  }, [save.combat.passiveTreasures])
 
   const pet = useMemo(() => {
-    if (!save?.combat.pet) return null
+    if (!save.combat.pet) return null
     const def = PET_BY_ID[save.combat.pet]
     if (!def) return null
     return {
@@ -154,59 +143,46 @@ export function BattleScreen({
       maxHp: driver.state?.petMaxHp ?? 0,
       ready: true,
     }
-  }, [save?.combat.pet, driver.state?.petHp, driver.state?.petMaxHp])
+  }, [save.combat.pet, driver.state?.petHp, driver.state?.petMaxHp])
 
-  const openTreasureByHud = useCallback(
-    (t: HudTreasure) => {
-      const defId = t.id.split('#')[0]
-      const def = TREASURE_BY_ID[defId]
-      if (!def) return
-      const owned = save?.combat.ownedTreasures.find((x) => x.defId === defId)
-      onOpenTreasure({
-        id: def.id,
-        name: def.name,
-        level: owned?.level ?? 1,
-        quality: def.quality as Treasure['quality'],
-        icon: def.icon,
-        cooldown: def.cooldown,
-        ready: 1,
-        damage: '—',
-        type: def.kind === 'passive' ? '被动' : '主动',
-        desc: def.desc,
-      })
-    },
-    [save?.combat.ownedTreasures, onOpenTreasure],
+  const enemyView = useMemo(
+    () => ({
+      name: driver.state ? battle.enemy.name : (view?.monsterName ?? '未知妖物'),
+      image: portraitForMonster(battle.enemy.def.id, battle.enemy.def.icon),
+      icon: battle.enemy.def.icon,
+      isBoss: battle.enemy.def.kind === 'boss',
+    }),
+    [battle, driver.state, view],
   )
 
   const timeLeft = driver.state ? Math.max(0, TIME_LIMIT - driver.state.time) : TIME_LIMIT
-  const overlayOpen = !transition && driver.result !== null
+  const overlayOpen = !transition && finish !== null
 
-  if (!save) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-ink-950 px-8">
-        <p className="font-serif text-sm tracking-[0.24em] text-cream-faint">
-          尚未开辟仙途
-        </p>
-        <InkButton variant="primary" size="md" onClick={onExit}>
-          回到主界面
-        </InkButton>
-      </div>
-    )
-  }
+  const handleContinue = useCallback(() => {
+    setFinish(null)
+    onExit()
+  }, [onExit])
+
+  const handleRetry = useCallback(() => {
+    // 重新挑战：由外部重开战斗实例（onExit 回主界面后再次进入）
+    setFinish(null)
+    setTransition(true)
+    onExit()
+  }, [onExit])
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-ink-950">
       <StageTransition
         open={transition}
-        chapter={stageInfo.chapter}
-        stageName={stageInfo.stageName}
-        kind={stageInfo.kind}
-        index={stageInfo.index}
+        chapter={view ? `第${chapterLabel(view.chapter)}章 · ${view.mapName}` : '青石村'}
+        stageName={view?.stageName ?? '未知之地'}
+        kind={view?.isBoss ? 'boss' : view?.kind === 'elite' ? 'elite' : view?.kind === 'event' ? 'event' : 'normal'}
+        index={`${view?.mapStage ?? 1} / 50`}
         onDone={() => setTransition(false)}
       />
 
       <div className="absolute inset-x-0 top-0 z-30">
-        <GameHeader onOpenProfile={onBack} />
+        <GameHeader onOpenProfile={onExit} />
       </div>
 
       {/* 战场 */}
@@ -214,14 +190,9 @@ export function BattleScreen({
         <BattleCanvas
           events={driver.events}
           state={driver.state}
-          enemy={{
-            name: driver.enemy.name,
-            image: driver.enemy.image,
-            icon: driver.enemy.icon,
-            isBoss: driver.enemy.isBoss,
-          }}
+          enemy={enemyView}
           player={{
-            name: save.profile.name || '凡尘散人',
+            name: save.profile.name || '无名散修',
             image: '/images/player-swordsman.png',
           }}
           width={size.width}
@@ -233,13 +204,13 @@ export function BattleScreen({
 
         <BattleHud
           state={driver.state}
-          enemy={{ name: driver.enemy.name, icon: driver.enemy.icon, isBoss: driver.enemy.isBoss }}
-          player={{ name: save.profile.name || '凡尘散人' }}
+          enemy={{ name: enemyView.name, icon: enemyView.icon, isBoss: enemyView.isBoss }}
+          player={{ name: save.profile.name || '无名散修' }}
           treasures={treasures}
           passives={passives}
           pet={pet}
           timeLeft={timeLeft}
-          onTreasureTap={openTreasureByHud}
+          onTreasureTap={(t) => onOpenTreasure(t.id.split('#')[0])}
         />
       </div>
 
@@ -271,14 +242,19 @@ export function BattleScreen({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={driver.skip}
-            className="flex items-center gap-1 rounded-full border border-gold-300/25 bg-ink-950/70 px-2.5 py-1 font-serif text-[11px] text-cream-faint transition-colors hover:text-gold-200"
-          >
-            <RotateCw className="size-3" />
-            跳过战斗
-          </button>
+          <div className="flex items-center gap-1.5">
+            <span className="font-serif text-[10px] tabular-nums text-cream-faint">
+              DPS {formatNumber(driver.state?.dps ?? 0)}
+            </span>
+            <button
+              type="button"
+              onClick={driver.skip}
+              className="flex items-center gap-1 rounded-full border border-gold-300/25 bg-ink-950/70 px-2.5 py-1 font-serif text-[11px] text-cream-faint transition-colors hover:text-gold-200"
+            >
+              <RotateCw className="size-3" />
+              跳过
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -287,62 +263,84 @@ export function BattleScreen({
             回洞府
           </InkButton>
           <InkButton
-            variant="primary"
+            variant="ghost"
             size="md"
-            className="flex-[1.6]"
-            onClick={driver.start}
-            disabled={driver.running}
+            className="flex-1"
+            onClick={() => setAuto(false)}
           >
-            {driver.running ? '激战中…' : '重新挑战'}
+            <LogOut className="size-3.5" />
+            暂停
           </InkButton>
         </div>
       </div>
 
       <BattleResultOverlay
         open={overlayOpen}
-        win={driver.result?.win ?? false}
-        stageName={stageInfo.stageName}
+        win={finish?.win ?? false}
+        stageName={view?.stageName ?? ''}
         damage={driver.result?.damage ?? 0}
         dps={driver.result?.dps ?? 0}
         duration={driver.result?.duration ?? 0}
-        drops={driver.result?.drops ? dropsFromEvents(driver.result.drops) : []}
-        failReason={driver.result?.failReason}
-        onContinue={onNextStage}
-        onRetry={() => driver.start()}
-        onExit={onExit}
+        drops={dropsToView(finish?.drops ?? [])}
+        gains={
+          finish
+            ? [
+                { label: '修为', value: `+${formatNumber(finish.cultivation)}`, icon: 'spark' },
+                { label: '灵石', value: `+${formatNumber(finish.stone)}`, icon: 'coin' },
+              ]
+            : undefined
+        }
+        failReason={finish?.failReason}
+        onContinue={handleContinue}
+        onRetry={handleRetry}
+        onExit={handleContinue}
       />
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ *
- * 掉落事件 → 结算展示
- * 当前引擎只给出掉落类别，具体装备实例由状态层结算后回填。
- * 这里保证即使只有类别也能看到一个像样的结算画面。
+ * 展示映射
  * ------------------------------------------------------------------ */
 
-const FALLBACK_ICON: Record<string, string> = {
-  装备: 'sword',
-  法宝碎片: 'vase',
-  炼器材料: 'ore',
-  丹药: 'pill',
+const QUALITY_ICON: Record<string, string> = {
+  white: 'gem',
+  green: 'gem',
+  blue: 'gem',
+  purple: 'gem',
+  orange: 'gem',
+  red: 'gem',
+  rainbow: 'gem',
 }
 
-function dropsFromEvents(events: { label?: string; quality?: Quality; icon?: string; value?: number }[]): BattleDropView[] {
-  return events.map((e, i) => {
-    const label = e.label ?? '所得'
-    const quality = e.quality ?? 'green'
-    return {
-      id: `${label}-${i}`,
-      name: label,
-      quality,
-      icon: e.icon ?? FALLBACK_ICON[label] ?? 'gem',
-      kindLabel: QUALITY[quality].label,
-    }
-  })
+function dropsToView(drops: Drop[]): BattleDropView[] {
+  return drops.map((d, i) => ({
+    id: `${d.kind}-${d.id ?? i}`,
+    name: d.label,
+    quality: (d.quality ?? 'green') as Quality,
+    icon: d.icon ?? QUALITY_ICON[d.quality ?? 'green'] ?? 'gem',
+    detail: d.count > 1 ? `×${d.count}` : undefined,
+    kindLabel: d.kind === 'equipment' ? '装备' : undefined,
+  }))
+}
+
+function portraitForMonster(id: string, icon: string): string | undefined {
+  const byId: Record<string, string> = {
+    boss_shanjun: '/images/boss-xueyan-shanjun.png',
+    boss_yushou_jiang: '/images/boss-shijin-wugong.png',
+    boss_heifeng_daoren: '/images/boss-heifeng-daoren.png',
+    boss_yinshan_gulong: '/images/boss-shijia-dilong.png',
+    mob_shanlang: '/images/boss-black-wolf.png',
+    mob_heifeng_lang: '/images/boss-black-wolf.png',
+  }
+  if (byId[id]) return byId[id]
+  if (icon === 'beast' || icon === 'wolf') return '/images/boss-black-wolf.png'
+  return undefined
 }
 
 function chapterLabel(chapter: number): string {
   const names = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
   return names[chapter - 1] ?? String(chapter)
 }
+
+export { QUALITY }

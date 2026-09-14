@@ -357,7 +357,16 @@ export function rollEquipment(opts: RollEquipOptions): EquipInstance {
   const stage = Math.max(1, Math.floor(opts.stage))
   const bonus = opts.dropRateBonus ?? 0
 
-  const pool = opts.slot ? EQUIP_TEMPLATES.filter((t) => t.slot === opts.slot) : EQUIP_TEMPLATES
+  // 根据关卡推算所属章节/地图，限制掉落的套装范围（PRD: 6套对应各章节）
+  // 1-50: qingshi, 51-100: heifeng, 101-150: luoxia, 151-200: chiyan 等
+  const availableSets = SETS.filter((s) => (s.chapter - 1) * 50 <= stage + 10).map((s) => s.id)
+  const setPool = availableSets.length > 0 ? availableSets : ['qingshi']
+  
+  let pool = opts.slot ? EQUIP_TEMPLATES.filter((t) => t.slot === opts.slot) : EQUIP_TEMPLATES
+  pool = pool.filter((t) => setPool.includes(t.set))
+  if (pool.length === 0) {
+    pool = opts.slot ? EQUIP_TEMPLATES.filter((t) => t.slot === opts.slot) : EQUIP_TEMPLATES
+  }
   const template = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]
 
   let quality: Quality = opts.quality ?? rollQuality(stage, bonus, rng)

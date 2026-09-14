@@ -64,9 +64,9 @@ export const MONSTERS: MonsterDef[] = [
     kind: 'elite',
     icon: 'beast',
     element: 'physical',
-    hpMul: 2.5,
-    atkMul: 1.5,
-    defMul: 1.2,
+    hpMul: 2.0,
+    atkMul: 1.25,
+    defMul: 1.1,
     aspd: 1.05,
     dropBonus: 0.2,
     bossMechanics: ['enrage'],
@@ -92,9 +92,9 @@ export const MONSTERS: MonsterDef[] = [
     kind: 'boss',
     icon: 'beast',
     element: 'fire',
-    hpMul: 7.6,
-    atkMul: 2.05,
-    defMul: 1.55,
+    hpMul: 4.8,
+    atkMul: 1.45,
+    defMul: 1.25,
     aspd: 0.95,
     dropBonus: 0.6,
     bossMechanics: ['enrage', 'summon', 'dot'],
@@ -433,7 +433,7 @@ export const MONSTERS: MonsterDef[] = [
 /* ------------------------------ 关卡蓝图 ------------------------------ */
 
 /* 换图处基准 = 上一张图基准 × growth^50，保证 200 关曲线连续、不出现阶跃 */
-const GROWTH: MapDef['growth'] = { hp: 1.055, atk: 1.045, def: 1.04 }
+const GROWTH: MapDef['growth'] = { hp: 1.033, atk: 1.02, def: 1.02 }
 
 function chainBase(prev: MapDef['base']): MapDef['base'] {
   return {
@@ -443,7 +443,7 @@ function chainBase(prev: MapDef['base']): MapDef['base'] {
   }
 }
 
-const BASE_1: MapDef['base'] = { hp: 900, atk: 60, def: 20 }
+const BASE_1: MapDef['base'] = { hp: 180, atk: 30, def: 16 }
 const BASE_2 = chainBase(BASE_1)
 const BASE_3 = chainBase(BASE_2)
 const BASE_4 = chainBase(BASE_3)
@@ -736,10 +736,10 @@ export function monsterStats(globalStage: number): {
   const { map, stage, monster } = getStage(globalStage)
   const m = monster
   const n = Math.max(0, stage.index - 1)
-  const kindMul = m?.kind === 'boss' ? 2.5 : m?.kind === 'elite' ? 1.6 : 1
-  const decadeMul = stage.index % 10 === 0 && stage.index !== map.stages.length ? 1.35 : 1
+  const kindMul = m?.kind === 'boss' ? 3.2 : m?.kind === 'elite' ? 2.2 : 1
+  const decadeMul = stage.index % 10 === 0 && stage.index !== map.stages.length ? 1.15 : 1
   const hp = map.base.hp * map.growth.hp ** n * (m?.hpMul ?? 1) * kindMul * decadeMul
-  const atk = map.base.atk * map.growth.atk ** n * (m?.atkMul ?? 1) * (m?.kind === 'boss' ? 1.35 : 1)
+  const atk = map.base.atk * map.growth.atk ** n * (m?.atkMul ?? 1) * (m?.kind === 'boss' ? 1.35 : m?.kind === 'elite' ? 1.2 : 1)
   const def = map.base.def * map.growth.def ** n * (m?.defMul ?? 1)
   return {
     hp: Math.max(1, Math.round(hp)),

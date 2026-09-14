@@ -1,7 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import type { MenuItem } from '@/lib/game-data'
+import type { MenuEntry } from './menus'
 import { GameIcon } from './GameIcon'
 import { RedDot } from './primitives'
 
@@ -11,9 +11,9 @@ export function SideMenu({
   onSelect,
   className,
 }: {
-  items: MenuItem[]
+  items: MenuEntry[]
   side: 'left' | 'right'
-  onSelect: (item: MenuItem) => void
+  onSelect: (item: MenuEntry) => void
   className?: string
 }) {
   return (

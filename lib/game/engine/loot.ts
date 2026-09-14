@@ -21,10 +21,11 @@ import {
   type EquipInstance,
   type EquipSlotId,
   type GameSave,
+  type MonsterKind,
   type Quality,
 } from '../types'
 import { equipScore, rollEquipment } from '../config/equipment'
-import { FORGE_MATERIAL_IDS } from '../config/materials'
+import { BREAKTHROUGH_MATERIAL_IDS, FORGE_MATERIAL_IDS } from '../config/materials'
 import { PILL_BY_ID } from '../config/pills'
 import { clamp, type Rng } from '../utils'
 
@@ -129,6 +130,27 @@ function pickMaterialId(stage: number, rand: () => number): string {
   if (jitter < 0.22) band -= 1
   else if (jitter > 0.86) band += 1
   return pool[clamp(band, 0, pool.length - 1)]
+}
+
+/**
+ * 突破材料按境界阶段投放：Boss / 精英 / 秘境掉落。
+ * 每张地图（50 关）对应一个大境界台阶，20 种突破材料按 50 关一个 bnad 分配，
+ * 保证玩家在图末卡关时手里已经攒够下一次突破所需。
+ */
+export function pickBreakthroughMaterial(stage: number, rand: () => number): string {
+  const band = clamp(Math.floor((stage - 1) / 50), 0, Math.floor((BREAKTHROUGH_MATERIAL_IDS.length - 1) / 2))
+  const base = band * 2
+  const pool = BREAKTHROUGH_MATERIAL_IDS.slice(base, base + 2)
+  const use = pool.length > 0 ? pool : BREAKTHROUGH_MATERIAL_IDS
+  return use[Math.min(use.length - 1, Math.floor(rand() * use.length))]
+}
+
+/** 该关卡是否应该掉落突破材料（Boss 必掉、精英高概率） */
+export function shouldDropBreakthrough(kind: MonsterKind, stage: number, rand: () => number): boolean {
+  if (kind === 'boss') return true
+  if (kind === 'elite') return rand() < 0.5
+  // 普通关在每张图后段（40 关之后）小概率掉落，给玩家一条保底路径
+  return (stage - 1) % 50 >= 39 && rand() < 0.2
 }
 
 /** 丹药按关卡分档池（低阶 id 起步，随关卡缓慢升级） */

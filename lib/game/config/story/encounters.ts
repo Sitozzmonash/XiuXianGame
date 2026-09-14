@@ -84,7 +84,7 @@ export const ENCOUNTERS: StoryNode[] = [
           { type: 'flag_set', key: 'e002_insight', value: true },
           { type: 'karma_add', key: 'jadeResonance', value: 1 },
           { type: 'give_cultivation', value: 500 },
-          { type: 'give_technique', key: 'tech_canpian_jian_yi' },
+          { type: 'give_technique', key: 'tech_jianxin_jue' },
           { type: 'log', value: '你在断碑前坐了一夜，得《残篇·剑意》。' },
         ],
         reply: [
@@ -378,7 +378,7 @@ export const ENCOUNTERS: StoryNode[] = [
         effects: [
           { type: 'flag_set', key: 'e007_captured', value: true },
           { type: 'karma_add', key: 'yaozuFame', value: -2 },
-          { type: 'give_pet', key: 'pet_qing_ling_hu' },
+          { type: 'give_pet', key: 'pet_qingling_fox' },
           { type: 'log', value: '你用藤索缚住灵狐。它一路没叫，到洞府后才开始绝食。' },
         ],
         reply: [
@@ -649,7 +649,7 @@ export const ENCOUNTERS: StoryNode[] = [
         text: '揭符开盒',
         effects: [
           { type: 'flag_set', key: 'e012_opened', value: true },
-          { type: 'give_treasure', key: 'tres_gu_mu_he' },
+          { type: 'give_treasure', key: 'tr_qingmu_gourd' },
           { type: 'karma_add', key: 'immortalErosion', value: 1 },
           { type: 'log', value: '盒中躺着一枚温润古珠。你握住它时，指尖闪过一片陌生的星空。' },
         ],
@@ -704,7 +704,7 @@ export const ENCOUNTERS: StoryNode[] = [
         effects: [
           { type: 'give_stone', value: -100 },
           { type: 'flag_set', key: 'e013_wine', value: true },
-          { type: 'give_technique', key: 'tech_canpian_wuxing_yinqi' },
+          { type: 'give_technique', key: 'tech_wuxing_lunzhuan' },
           { type: 'relation_add', key: 'luo_qi', value: 5 },
           { type: 'log', value: '道人饮尽一囊酒，口述一段口诀，末了又说：记不住就算了。' },
         ],
@@ -718,7 +718,7 @@ export const ENCOUNTERS: StoryNode[] = [
         effects: [
           { type: 'flag_set', key: 'e013_stolen', value: true },
           { type: 'karma_add', key: 'daoHeart', value: -1 },
-          { type: 'give_technique', key: 'tech_canpian_wuxing_yinqi' },
+          { type: 'give_technique', key: 'tech_wuxing_lunzhuan' },
           { type: 'give_cultivation', value: 300 },
           { type: 'log', value: '你偷看了他的功法。道人翻了个身，酒后哼了一句：偷就偷了。' },
         ],
@@ -1157,7 +1157,7 @@ export const ENCOUNTERS: StoryNode[] = [
           { type: 'consume_item', key: 'mat_ling_cao', count: 3 },
           { type: 'flag_set', key: 'e022_gave', value: true },
           { type: 'give_item', key: 'pill_ning_shen_dan', count: 2 },
-          { type: 'give_technique', key: 'tech_canpian_dan_fang' },
+          { type: 'give_technique', key: 'tech_qingmu_changsheng' },
           { type: 'relation_add', key: 'luo_wuyi', value: 4 },
           { type: 'log', value: '老者收下灵草，回赠你两枚凝神丹与半篇丹方。' },
         ],
@@ -1170,7 +1170,7 @@ export const ENCOUNTERS: StoryNode[] = [
         text: '索要丹方为报',
         effects: [
           { type: 'flag_set', key: 'e022_asked', value: true },
-          { type: 'give_technique', key: 'tech_canpian_dan_fang' },
+          { type: 'give_technique', key: 'tech_qingmu_changsheng' },
           { type: 'karma_add', key: 'daoHeart', value: -1 },
           { type: 'log', value: '你讨了丹方。老者笑了笑就给了，笑得有点淡。' },
         ],
@@ -1257,7 +1257,7 @@ export const ENCOUNTERS: StoryNode[] = [
         text: '带回洞府孵化',
         effects: [
           { type: 'flag_set', key: 'e024_hatched', value: true },
-          { type: 'give_pet', key: 'pet_yun_wen_shou' },
+          { type: 'give_pet', key: 'pet_xuanjia_turtle' },
           { type: 'karma_add', key: 'yaozuFame', value: -1 },
           { type: 'log', value: '你带回那枚蛋。第七夜它裂了，出来的东西先看你，再看这间屋子。' },
         ],
@@ -1460,7 +1460,7 @@ export const ENCOUNTERS: StoryNode[] = [
         text: '与它谈条件',
         effects: [
           { type: 'flag_set', key: 'e028_bargained', value: true },
-          { type: 'give_technique', key: 'tech_canpian_duo_she_shu' },
+          { type: 'give_technique', key: 'tech_ranshou_modian' },
           { type: 'karma_add', key: 'demonThought', value: 1 },
           { type: 'karma_add', key: 'immortalErosion', value: 1 },
           { type: 'log', value: '它口述了一篇夺舍术，你记下之后立刻封了玉坠。' },

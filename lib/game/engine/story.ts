@@ -17,6 +17,7 @@ import {
   type StoryNode,
 } from '../types'
 import { STORY_NODES, ENCOUNTERS, STORY_NODE_BY_ID, npcName } from '../config/story'
+import { MAPS } from '../config/maps'
 import { stageIndexOf } from '../config/realms'
 
 /* ------------------------------------------------------------------ *
@@ -191,18 +192,35 @@ function consumed(node: StoryNode, save: GameSave): boolean {
 
 /**
  * 当前关卡可触发的主线节点。
- * stageRange 使用地图内关卡序号（save.progress.mapStage），与地图配置一致。
+ * stageRange 使用地图内关卡序号，同时必须与当前地图所属章节一致 ——
+ * 否则「黑风岭第 5 关」会在青石村第 5 关提前触发。
  */
-export function availableStoryNodes(save: GameSave): StoryNode[] {
-  const mapStage = save.progress.mapStage
+export function availableStoryNodes(
+  save: GameSave,
+  mapStageOverride?: number,
+  mapIdOverride?: string,
+): StoryNode[] {
+  const mapStage = mapStageOverride ?? save.progress.mapStage
+  const mapId = mapIdOverride ?? save.progress.mapId
+  const chapter = chapterOfMap(mapId)
   return STORY_NODES.filter(
     (n) =>
       n.trigger === 'stage' &&
       inStageRange(n, mapStage) &&
+      (chapter === null || n.chapter === chapter) &&
       !consumed(n, save) &&
       evalAll(n.conditions, save),
   ).sort((a, b) => (a.stageRange?.[0] ?? 0) - (b.stageRange?.[0] ?? 0))
 }
+
+/** 地图所属章节；未知地图返回 null（不做章节约束） */
+function chapterOfMap(mapId: string): number | null {
+  return MAP_CHAPTER[mapId] ?? null
+}
+
+const MAP_CHAPTER: Record<string, number> = Object.fromEntries(
+  MAPS.map((m) => [m.id, m.chapter]),
+)
 
 /** 当前关卡可触发的奇遇候选（不含冷却判断） */
 export function encounterPool(save: GameSave): StoryNode[] {

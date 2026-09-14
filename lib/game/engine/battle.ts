@@ -46,19 +46,35 @@ const SEAL_DURATION = 6
 
 /* ------------------------------ 玩家属性 ------------------------------ */
 
-const BASE_HP = 620
-const BASE_ATK = 78
-const BASE_DEF = 34
+const BASE_HP = 1800
+const BASE_ATK = 150
+const BASE_DEF = 70
 const BASE_ASPD = 1.05
 const BASE_CRIT = 0.05
 const BASE_CRIT_DMG = 1.5
 const BASE_HIT = 0.92
 const BASE_EVA = 0.03
 
-/** 境界阶段的线性成长系数 */
+/**
+ * 阶段成长系数。用幂函数而非线性：关卡属性按 1.033^n 指数增长，
+ * 玩家线性成长必然在中后期掉队，这里让 hp/atk/def 各自按匹配的指数走。
+ * idx 是炼气一层起的阶段序号（0~18），大境界之间由 RealmDef.multiplier 承接台阶。
+ */
 function stageScale(stageId: string): number {
-  return 1 + flatStage(stageId).index * 0.22
+  return scaleFor(flatStage(stageId).index, HP_GROWTH_EXP)
 }
+
+/** 单个属性的成长曲线 */
+function scaleFor(idx: number, exp: number): number {
+  return 1 + Math.pow(idx, exp) * 0.5
+}
+
+/** 与怪物 HP 成长（1.033/关 ≈ 5.1/阶段）对齐 */
+const HP_GROWTH_EXP = 1.35
+/** 输出要略快于敌方血量成长，战斗才不会越拖越长 */
+const ATK_GROWTH_EXP = 1.4
+/** 防御成长慢于攻击，避免减伤逐渐吃满让战斗变成纯数值比拼 */
+const DEF_GROWTH_EXP = 1.15
 
 export interface CombatantStats {
   stats: Stats
@@ -74,11 +90,12 @@ export function playerCombatant(save: GameSave): CombatantStats {
   const scale = stageScale(save.profile.stageId)
   const rMul = realm.multiplier
 
+  const idx = flatStage(save.profile.stageId).index
   const base: Stats = {
     ...ZERO_STATS,
     hp: BASE_HP * scale * rMul,
-    atk: BASE_ATK * scale * Math.sqrt(rMul),
-    def: BASE_DEF * scale * Math.sqrt(rMul),
+    atk: BASE_ATK * scaleFor(idx, ATK_GROWTH_EXP) * Math.sqrt(rMul),
+    def: BASE_DEF * scaleFor(idx, DEF_GROWTH_EXP) * Math.sqrt(rMul),
     aspd: BASE_ASPD,
     crit: BASE_CRIT,
     critDmg: BASE_CRIT_DMG,
@@ -342,6 +359,15 @@ export function rollDrops(
   if (kind === 'boss' && rng.chance(0.55)) {
     drops.push({ kind: 'treasure', count: 1, label: '法宝碎片' })
   }
+  // 功法残篇 / 灵兽契：给 Build 系统一条不依赖剧情分支的获取路径
+  if (kind === 'boss' && rng.chance(0.7)) {
+    drops.push({ kind: 'technique', count: 1, label: '功法残篇' })
+  } else if (kind === 'elite' && rng.chance(0.18)) {
+    drops.push({ kind: 'technique', count: 1, label: '功法残篇' })
+  }
+  if (kind === 'boss' && rng.chance(0.4)) {
+    drops.push({ kind: 'pet', count: 1, label: '灵兽契' })
+  }
   if (kind === 'boss' && rng.chance(0.35)) {
     drops.push({ kind: 'pill', count: rng.int(1, 2), label: '丹药' })
   }
@@ -356,8 +382,8 @@ export function rollDrops(
 export function stageReward(globalStage: number): { stone: number; cultivation: number } {
   const s = Math.max(1, Math.floor(globalStage))
   return {
-    stone: Math.round(25 * Math.pow(s, 0.91)),
-    cultivation: Math.round(40 * Math.pow(s, 0.92)),
+    stone: Math.round(28 * Math.pow(s, 0.95)),
+    cultivation: Math.round(160 * Math.pow(s, 1.35)),
   }
 }
 

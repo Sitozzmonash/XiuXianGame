@@ -1,17 +1,15 @@
 'use client'
 
 /* ------------------------------------------------------------------ *
- * 战斗驱动 hook —— UI 与战斗引擎之间的桥
+ * 战斗驱动 hook —— 表现层与战斗引擎之间的桥
  *
- * 职责边界：本 hook 只负责「把引擎推进、把结果交出去」，不持有存档、
- * 不修改存档。调用方传入 save 快照与关卡号，战斗结束后由 onFinish 回调
- * 把结果交回给状态层结算。
+ * 战斗实例由状态层（store.startBattle）创建，本 hook 只负责按帧推进、
+ * 收集事件、在结束后停留一段时间播完特效，然后把结果交回调用方。
  * ------------------------------------------------------------------ */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LiveBattle } from '@/lib/game/engine/battle'
-import { TREASURE_BY_ID, getStage } from '@/lib/game/config'
-import type { BattleEvent, GameSave, LiveBattleState } from '@/lib/game/types'
+import type { LiveBattle } from '@/lib/game/engine/battle'
+import type { BattleEvent, LiveBattleState } from '@/lib/game/types'
 
 const FIXED_DT = 1 / 60
 const MAX_STEPS_PER_FRAME = 12
@@ -24,7 +22,7 @@ export interface BattleEnemyView {
   image?: string
   icon?: string
   isBoss: boolean
-  element: string
+  element?: string
 }
 
 export interface BattleResultInfo {
@@ -33,52 +31,48 @@ export interface BattleResultInfo {
   dps: number
   duration: number
   failReason?: string
-  drops: BattleEvent[]
+  /** 战斗过程中的掉落类事件 */
+  dropEvents: BattleEvent[]
 }
 
 export interface UseBattleDriverOptions {
-  /** 存档快照。战斗期间不再读取，保证战斗过程不被中途状态变化干扰 */
-  save: GameSave | null
-  /** 全局关卡序号 */
-  stage: number
-  /** 自动战斗开关。关闭时战斗暂停，由调用方手动推进 */
+  /** 由 store.startBattle() 创建的战斗实例；传 null 表示尚未就绪 */
+  battle: LiveBattle | null
+  /** 自动战斗开关。关闭时暂停推进 */
   auto: boolean
   /** 倍速 1 / 2 / 3 */
   speed: number
-  /** 战斗结束（含特效停留）后回调 */
+  /** 特效停留播完后回调 */
   onFinish?: (info: BattleResultInfo) => void
+  /** 提前结束（跳过）：跳过时不停留，直接回调 */
+  onSkip?: (info: BattleResultInfo) => void
 }
 
 export interface BattleDriver {
   state: LiveBattleState | null
-  /** 本帧新增的事件，交给 BattleCanvas */
+  /** 累积到当前帧的事件，交给 BattleCanvas */
   events: BattleEvent[]
-  enemy: BattleEnemyView
   /** 战斗结束但特效仍在播放 */
   settling: boolean
-  /** 最近一次战斗结果 */
   result: BattleResultInfo | null
-  /** 手动开始 / 重新挑战 */
-  start: () => void
-  /** 跳过当前战斗的战斗过程，直接出结果 */
+  /** 跳过战斗过程，直接出结果 */
   skip: () => void
-  /** 是否正在战斗 */
+  /** 是否正在战斗中 */
   running: boolean
 }
 
 export function useBattleDriver({
-  save,
-  stage,
+  battle,
   auto,
   speed,
   onFinish,
+  onSkip,
 }: UseBattleDriverOptions): BattleDriver {
   const [state, setState] = useState<LiveBattleState | null>(null)
   const [events, setEvents] = useState<BattleEvent[]>([])
   const [settling, setSettling] = useState(false)
   const [result, setResult] = useState<BattleResultInfo | null>(null)
 
-  const battleRef = useRef<LiveBattle | null>(null)
   const bufferRef = useRef<BattleEvent[]>([])
   const rafRef = useRef<number | null>(null)
   const lastRef = useRef(0)
@@ -88,22 +82,14 @@ export function useBattleDriver({
   const autoRef = useRef(auto)
   const speedRef = useRef(speed)
   const onFinishRef = useRef(onFinish)
+  const onSkipRef = useRef(onSkip)
+  const damageRef = useRef(0)
+  const enemyDamageRef = useRef(0)
 
   autoRef.current = auto
   speedRef.current = speed
   onFinishRef.current = onFinish
-
-  /** 从配置推导敌方的展示信息 */
-  const enemy = useMemo<BattleEnemyView>(() => {
-    const info = getStageSafe(stage)
-    return {
-      name: info.name,
-      image: info.image,
-      icon: info.icon,
-      isBoss: info.isBoss,
-      element: info.element,
-    }
-  }, [stage])
+  onSkipRef.current = onSkip
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -112,38 +98,45 @@ export function useBattleDriver({
     }
   }, [])
 
-  const buildResult = useCallback((battle: LiveBattle): BattleResultInfo => {
-    const st = battle.state
-    const drops = st.events.filter((e) => e.type === 'drop')
+  const buildResult = useCallback((lb: LiveBattle): BattleResultInfo => {
+    const st = lb.state
+    const dropEvents = st.events.filter(
+      (e) => e.type === 'drop' || e.type === 'victory',
+    )
     return {
       win: st.win,
-      damage: Math.round(st.dps * Math.max(0.5, st.time)),
+      damage: Math.round(damageRef.current),
       dps: Math.round(st.dps),
       duration: st.time,
-      failReason: st.win ? undefined : battle.failReason(),
-      drops,
+      failReason: st.win ? undefined : lb.failReason(),
+      dropEvents,
     }
   }, [])
 
-  /** 创建一场新战斗 */
-  const start = useCallback(() => {
-    if (!save) return
+  /* 战斗实例变化时重开循环 */
+  useEffect(() => {
     stopLoop()
+    if (!battle) {
+      setState(null)
+      setEvents([])
+      setResult(null)
+      setSettling(false)
+      return
+    }
+
     finishedRef.current = false
     holdRef.current = 0
     accRef.current = 0
+    lastRef.current = 0
+    damageRef.current = 0
+    enemyDamageRef.current = 0
     bufferRef.current = []
     setResult(null)
     setSettling(false)
-
-    const battle = new LiveBattle({ save, globalStage: stage })
-    battleRef.current = battle
     setState({ ...battle.state })
     setEvents([])
 
     const loop = (now: number) => {
-      const battle = battleRef.current
-      if (!battle) return
       const last = lastRef.current || now
       lastRef.current = now
       // 切后台回来时可能积压大量时间，钳制避免一次推进过多
@@ -183,13 +176,14 @@ export function useBattleDriver({
       rafRef.current = requestAnimationFrame(loop)
     }
 
-    lastRef.current = 0
     rafRef.current = requestAnimationFrame(loop)
-  }, [save, stage, buildResult, stopLoop])
+    return stopLoop
+  }, [battle, buildResult, stopLoop])
 
-  /** 跳过：把剩余的模拟一次性跑完，然后进入停留阶段 */
+  useEffect(() => () => stopLoop(), [stopLoop])
+
+  /** 跳过：把剩余模拟一次性跑完，随后走正常的停留 → 回调流程 */
   const skip = useCallback(() => {
-    const battle = battleRef.current
     if (!battle || finishedRef.current) return
     let guard = 0
     while (!battle.state.done && guard < 20000) {
@@ -197,96 +191,25 @@ export function useBattleDriver({
       if (produced.length) bufferRef.current.push(...produced)
       guard++
     }
+    if (!battle.state.done) battle.tick(120)
     finishedRef.current = true
     holdRef.current = 0.6
     setSettling(true)
     setState({ ...battle.state })
     setEvents(bufferRef.current.slice())
-  }, [])
+    const info = buildResult(battle)
+    onSkipRef.current?.(info)
+  }, [battle, buildResult])
 
-  /** save / stage 变化时重开一场 */
-  useEffect(() => {
-    if (!save) return
-    start()
-    return stopLoop
-    // 只在关卡变化时重开；save 引用变化由调用方通过 start() 显式控制
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, start])
-
-  useEffect(() => {
-    return () => {
-      stopLoop()
-      battleRef.current = null
-    }
-  }, [stopLoop])
-
-  return {
-    state,
-    events,
-    enemy,
-    settling,
-    result,
-    start,
-    skip,
-    running: !!state && !state.done,
-  }
-}
-
-/** 从关卡配置安全推导敌方展示信息；配置缺失时给出兜底，绝不抛异常 */
-function getStageSafe(globalStage: number): {
-  name: string
-  image?: string
-  icon?: string
-  isBoss: boolean
-  element: string
-} {
-  try {
-    const { stage, monster } = getStage(globalStage)
-    const isBoss = monster?.kind === 'boss'
-    const portraits: Record<string, string> = {
-      boss_placeholder_shanjun: '/images/boss-black-wolf.png',
-    }
-    const iconToImage: Record<string, string> = {
-      beast: '/images/boss-black-wolf.png',
-      wolf: '/images/boss-black-wolf.png',
-    }
-    const image =
-      (monster && portraits[monster.id]) ||
-      (monster && iconToImage[monster.icon]) ||
-      (isBoss ? '/images/boss-black-wolf.png' : undefined)
-    return {
-      name: monster?.name ?? stage.name,
-      image,
-      icon: monster?.icon,
-      isBoss,
-      element: monster?.element ?? 'physical',
-    }
-  } catch {
-    return { name: '未知妖物', isBoss: false, element: 'physical' }
-  }
-}
-
-/** 从主动法宝槽推导 HUD 需要的冷却信息 */
-export function hudTreasuresFor(save: GameSave | null): {
-  id: string
-  name: string
-  icon: string
-  cooldown: number
-  quality?: string
-}[] {
-  if (!save) return []
-  return save.combat.activeTreasures
-    .filter((id): id is string => !!id)
-    .map((id) => {
-      const def = TREASURE_BY_ID[id]
-      if (!def) return null
-      return {
-        id: def.id,
-        name: def.name,
-        icon: def.icon,
-        cooldown: def.cooldown,
-        quality: def.quality,
-      }
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null)
+  return useMemo(
+    () => ({
+      state,
+      events,
+      settling,
+      result,
+      skip,
+      running: !!state && !state.done,
+    }),
+    [state, events, settling, result, skip],
+  )
 }

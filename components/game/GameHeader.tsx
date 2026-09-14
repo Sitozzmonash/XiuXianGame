@@ -3,8 +3,11 @@
 import Image from 'next/image'
 import { Coins, Settings, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { player } from '@/lib/game-data'
 import { ResourceValue } from './primitives'
+import { useGameStore } from '@/lib/game/state/store'
+import { power } from '@/lib/game/state/selectors'
+import { flatStage } from '@/lib/game/config/realms'
+import { formatNumber } from '@/lib/game/utils'
 
 export function ResourceBar({
   className,
@@ -13,16 +16,19 @@ export function ResourceBar({
   className?: string
   onAdd?: (kind: 'stone' | 'cultivation') => void
 }) {
+  const stone = useGameStore((s) => s.save.resources.stone)
+  const cult = useGameStore((s) => s.save.profile.cultivation)
+
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
       <ResourceValue
         icon={<Coins className="size-3" />}
-        value="12.6万"
+        value={formatNumber(stone)}
         onAdd={() => onAdd?.('stone')}
       />
       <ResourceValue
         icon={<Sparkles className="size-3" />}
-        value="324.8万"
+        value={formatNumber(cult)}
         onAdd={() => onAdd?.('cultivation')}
       />
     </div>
@@ -36,6 +42,10 @@ export function PlayerProfile({
   className?: string
   onClick?: () => void
 }) {
+  const save = useGameStore((s) => s.save)
+  const playerPower = power(save)
+  const realmStage = flatStage(save.profile.stageId).stage.label
+
   return (
     <button
       type="button"
@@ -44,25 +54,25 @@ export function PlayerProfile({
     >
       <span className="relative size-11 shrink-0 overflow-hidden rounded-full ring-2 ring-gold-300/50">
         <Image
-          src={player.portrait}
-          alt={player.name}
+          src="/images/player-portrait.png"
+          alt={save.profile.name}
           fill
           sizes="44px"
           className="object-cover object-top"
         />
         <span className="absolute inset-x-0 bottom-0 bg-ink-950/85 text-center font-serif text-[9px] leading-[13px] text-gold-200">
-          {player.level}
+          {save.profile.level}
         </span>
       </span>
       <span className="min-w-0">
         <span className="block truncate font-serif text-sm font-bold text-cream">
-          {player.name}
+          {save.profile.name}
         </span>
         <span className="block text-[10px] text-jade-300">
-          {player.realm} · Lv.{player.level}
+          {realmStage} · Lv.{save.profile.level}
         </span>
         <span className="block text-[10px] text-gold-300/90">
-          战力 52.3万
+          战力 {formatNumber(playerPower)}
         </span>
       </span>
     </button>

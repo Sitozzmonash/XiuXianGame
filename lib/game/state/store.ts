@@ -14,6 +14,10 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 
 import { MAPS, MONSTER_BY_ID, TREASURE_BY_ID, TECHNIQUE_BY_ID, NPC_BY_ID, getStage, globalToMap } from '../config'
 import { rollEquipment } from '../config/equipment'
+import { TREASURES } from '../config/treasures'
+import { TECHNIQUES } from '../config/techniques'
+import { PETS } from '../config/pets'
+import { resolveStoryItem } from '../config/storyItems'
 import { flatStage, nextStage } from '../config/realms'
 import {
   LiveBattle,
@@ -43,7 +47,9 @@ import {
   autoEquipBest,
   expandCost,
   materializeDrops,
+  pickBreakthroughMaterial,
   salvageValue,
+  shouldDropBreakthrough,
 } from '../engine/loot'
 import { enterRealm, moveTo, nodeOf, realmById, resolveNode, settleRealm } from '../engine/realm'
 import {
@@ -145,10 +151,12 @@ function applyBundle(s: GameSave, b: EffectBundle, rng: ReturnType<typeof makeRn
   const materials: Record<string, number> = {}
   const pills: Record<string, number> = {}
   for (const it of b.items) {
-    const target = it.id.startsWith('pill_') ? pills : materials
-    target[it.id] = (target[it.id] ?? 0) + it.count
+    // 剧情里的叙事道具（御兽钉、青禾玉符等）按映射表落到真实材料上
+    const resolved = resolveStoryItem(it.id)
+    const target = resolved.startsWith('pill_') ? pills : materials
+    target[resolved] = (target[resolved] ?? 0) + it.count
   }
-  for (const p of b.pills) pills[p.id] = (pills[p.id] ?? 0) + p.count
+  for (const p of b.pills) pills[resolveStoryItem(p.id)] = (pills[resolveStoryItem(p.id)] ?? 0) + p.count
 
   const rolls: EquipInstance[] = []
   for (const roll of b.equipmentRolls) {
@@ -178,22 +186,9 @@ function applyBundle(s: GameSave, b: EffectBundle, rng: ReturnType<typeof makeRn
     s.inventory.pills[id] = (s.inventory.pills[id] ?? 0) + n
   }
 
-  for (const defId of b.treasureIds) {
-    if (!TREASURE_BY_ID[defId]) continue
-    if (s.combat.ownedTreasures.some((t) => t.defId === defId)) continue
-    s.combat.ownedTreasures.push({ uid: uid('tr'), defId, level: 1, tier: 0, equipped: false })
-    autoSlotTreasure(s, defId)
-  }
-  s.stats.treasuresOwned = s.combat.ownedTreasures.length
+  for (const defId of b.treasureIds) grantTreasure(s, defId)
 
-  for (const defId of b.techniqueIds) {
-    if (!TECHNIQUE_BY_ID[defId]) continue
-    if (!s.combat.techniques.some((t) => t.defId === defId)) {
-      s.combat.techniques.push({ defId, level: 1 })
-    }
-    const def = TECHNIQUE_BY_ID[defId]
-    if (def.role === 'main' && !s.combat.mainTechnique) s.combat.mainTechnique = defId
-  }
+  for (const defId of b.techniqueIds) grantTechnique(s, defId)
 
   for (const petId of b.petIds) {
     const owned = (s.combat.ownedPets ??= [])
@@ -226,12 +221,50 @@ function autoSlotTreasure(s: GameSave, defId: string): void {
   if (inst) inst.equipped = true
 }
 
+/** 发放一件法宝：已拥有则跳过；入库后若槽位有空自动上阵 */
+function grantTreasure(s: GameSave, defId: string): boolean {
+  const def = TREASURE_BY_ID[defId]
+  if (!def) return false
+  if (s.combat.ownedTreasures.some((t) => t.defId === defId)) return false
+  s.combat.ownedTreasures.push({ uid: uid('tr'), defId, level: 1, tier: 0, equipped: false })
+  autoSlotTreasure(s, defId)
+  s.stats.treasuresOwned = s.combat.ownedTreasures.length
+  pushLog(s, `获得法宝「${def.name}」。`, 'reward')
+  return true
+}
+
+/** 发放一本功法：已拥有则跳过；主修功法空缺时自动顶上 */
+function grantTechnique(s: GameSave, defId: string): boolean {
+  const def = TECHNIQUE_BY_ID[defId]
+  if (!def) return false
+  if (s.combat.techniques.some((t) => t.defId === defId)) return false
+  s.combat.techniques.push({ defId, level: 1 })
+  if (def.role === 'main' && !s.combat.mainTechnique) s.combat.mainTechnique = defId
+  const support = s.combat.supportTechniques
+  if (def.role !== 'main') {
+    const idx = support.findIndex((v) => !v)
+    if (idx >= 0) support[idx] = defId
+  }
+  pushLog(s, `习得功法「${def.name}」。`, 'reward')
+  return true
+}
+
 /** 当前关卡及关卡区间内、尚未播放的剧情节点 id（主线挂载 + 奇遇池条件） */
-function pendingStoryIds(s: GameSave): string[] {
+/**
+ * 当前应入队的剧情节点。
+ * spot 缺省用存档的当前进度；结算关卡时应显式传入「刚打完的那一关」，
+ * 因为此时 progress 可能已经推进到下一关。
+ */
+function pendingStoryIds(
+  s: GameSave,
+  spot?: { mapStage: number; globalStage: number },
+): string[] {
+  const globalStage = spot?.globalStage ?? s.progress.stage
+  const mapStage = spot?.mapStage ?? s.progress.mapStage
   const out: string[] = []
-  const { stage } = getStage(s.progress.stage)
+  const { stage } = getStage(globalStage)
   if (stage.storyId) out.push(stage.storyId)
-  for (const n of availableStoryNodes(s)) out.push(n.id)
+  for (const n of availableStoryNodes(s, mapStage)) out.push(n.id)
   const seen = new Set(s.story.seenNodes)
   return [...new Set(out)].filter((id) => !seen.has(id))
 }
@@ -573,9 +606,53 @@ export const useGameStore = create<GameStore>()(
             const cultGain = Math.round(cultivation)
 
             const drops = applyPity(s, rollDrops(stage, rng, { dropRate: p.stats.dropRate, rareDropRate: p.stats.rareDropRate }))
+            // 突破材料：Boss 必掉、精英高概率、图末普通关保底
+            if (shouldDropBreakthrough(kindOf, stage, () => rng.next())) {
+              drops.push({
+                kind: 'material',
+                id: pickBreakthroughMaterial(stage, () => rng.next()),
+                count: kindOf === 'boss' ? 2 : 1,
+                label: '突破材料',
+              })
+            }
             const lb = materializeDrops(s, drops, rng)
             result.newItems = lb.equipment
             result.drops = drops
+
+            // 法宝掉落：materializeDrops 不处理 treasure 类型，需在此发放入库并自动上阵
+            for (const d of drops) {
+              if (d.kind !== 'treasure') continue
+              if (d.id) {
+                grantTreasure(s, d.id)
+              } else {
+                const pool = TREASURES.filter(
+                  (t) =>
+                    !s.combat.ownedTreasures.some((x) => x.defId === t.id) &&
+                    (t.unlockStage ?? 1) <= stage + 20,
+                )
+                if (pool.length > 0) grantTreasure(s, pool[rng.int(0, pool.length - 1)].id)
+              }
+            }
+
+            // 功法残篇 / 灵兽契：同样不走 materializeDrops
+            for (const d of drops) {
+              if (d.kind === 'technique') {
+                const fresh = TECHNIQUES.filter(
+                  (t) => !s.combat.techniques.some((x) => x.defId === t.id),
+                )
+                if (fresh.length > 0) grantTechnique(s, fresh[rng.int(0, fresh.length - 1)].id)
+              }
+              if (d.kind === 'pet' && !s.combat.pet) {
+                const pool = PETS.filter(
+                  (p) => !(s.combat.ownedPets ?? []).includes(p.id),
+                )
+                if (pool.length > 0) {
+                  const picked = pool[rng.int(0, pool.length - 1)].id
+                  ;(s.combat.ownedPets ??= []).push(picked)
+                  s.combat.pet = picked
+                }
+              }
+            }
             const added = addToInventory(s, lb, { autoSalvageBelow: s.inventory.autoSalvageBelow })
             s.inventory.items = added.items
             s.inventory.materials = added.materials
@@ -603,28 +680,35 @@ export const useGameStore = create<GameStore>()(
 
             const nextGlobal = stage + 1
             if (nextGlobal <= MAX_STAGE) {
-              const { mapId, mapStage } = globalToMap(nextGlobal)
+              // 剧情节点按「刚打完的这一关」入队，必须在推进关卡之前求值：
+              // 推进后 mapStage 已指向下一关，会读到错误的关卡区间。
+              const storyNow = pendingStoryIds(s, {
+                mapStage: globalToMap(stage).mapStage,
+                globalStage: stage,
+              })
+
+              const next = globalToMap(nextGlobal)
               s.progress.stage = nextGlobal
-              s.progress.mapId = mapId
-              s.progress.mapStage = mapStage
+              s.progress.mapId = next.mapId
+              s.progress.mapStage = next.mapStage
               result.advancedTo = nextGlobal
+
+              s.story.pending = s.story.pending.filter((id) => !s.story.seenNodes.includes(id))
+              for (const id of storyNow) {
+                if (!s.story.pending.includes(id)) s.story.pending.push(id)
+              }
+              result.storyPending = [...s.story.pending]
+
+              pushLog(
+                s,
+                kindOf === 'boss'
+                  ? `斩落「${monster?.name ?? st.name}」，通往下一段路。`
+                  : `踏破 ${st.name}`,
+                'battle',
+              )
             } else {
               pushLog(s, '你已走到当前版本的最后一关。', 'system')
             }
-
-            s.story.pending = s.story.pending.filter((id) => !s.story.seenNodes.includes(id))
-            for (const id of pendingStoryIds(s)) {
-              if (!s.story.pending.includes(id)) s.story.pending.push(id)
-            }
-            result.storyPending = [...s.story.pending]
-
-            pushLog(
-              s,
-              kindOf === 'boss'
-                ? `斩落「${monster?.name ?? st.name}」，通往下一段路。`
-                : `踏破 ${st.name}`,
-              'battle',
-            )
           } else {
             s.stats.deaths += 1
             s.progress.stableStage = Math.max(1, Math.min(s.progress.stableStage || 1, s.progress.maxStage || 1))

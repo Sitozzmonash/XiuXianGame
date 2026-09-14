@@ -2,7 +2,8 @@
 
 import { ChevronLeft, ChevronRight, Skull } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { chapters, currentChapter, chapterPoem } from '@/lib/game-data'
+import { useGameStore } from '@/lib/game/state/store'
+import { stageView, mapProgressList } from '@/lib/game/state/selectors'
 
 export function StageProgress({
   progress,
@@ -14,7 +15,7 @@ export function StageProgress({
   className?: string
 }) {
   const nodes = 5
-  const filled = Math.round((progress / total) * nodes)
+  const filled = Math.round((progress / Math.max(1, total)) * nodes)
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
       {Array.from({ length: nodes }).map((_, i) => (
@@ -44,6 +45,12 @@ export function ChapterHeader({
   onNext?: () => void
   className?: string
 }) {
+  const save = useGameStore((s) => s.save)
+  const view = stageView(save)
+  const maps = mapProgressList(save)
+  const currentMap = maps.find((m) => m.id === view.mapId)
+  const totalStages = currentMap?.total ?? 50
+
   return (
     <div className={cn('relative z-20 flex flex-col items-center gap-1.5', className)}>
       <div className="flex items-center gap-2">
@@ -57,7 +64,7 @@ export function ChapterHeader({
         </button>
         <div className="relative rounded-sm border border-gold-300/40 bg-gradient-to-b from-ink-800/95 to-ink-950/95 px-4 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.6)]">
           <span className="font-serif text-sm font-bold tracking-wide text-gold-200 text-glow-gold">
-            第{String(currentChapter.id).padStart(2, '0')}章 {currentChapter.name}
+            第{String(view.chapter).padStart(2, '0')}章 {view.mapName}
           </span>
         </div>
         <button
@@ -71,25 +78,25 @@ export function ChapterHeader({
       </div>
 
       <div className="flex items-center gap-2">
-        <StageProgress progress={currentChapter.progress} total={currentChapter.total} />
+        <StageProgress progress={view.mapStage} total={totalStages} />
         <span className="font-serif text-[11px] text-cream-dim">
-          关卡进度 {currentChapter.progress}/{currentChapter.total}
+          关卡进度 {view.mapStage}/{totalStages}
         </span>
       </div>
 
       <p className="font-serif text-[11px] tracking-widest text-cream-faint">
-        {chapterPoem}
+        {currentMap?.poem ?? ''}
       </p>
 
       <div className="mt-0.5 flex items-center gap-1.5">
-        {chapters.map((c) => (
+        {maps.map((m) => (
           <span
-            key={c.id}
+            key={m.id}
             className={cn(
               'h-0.5 w-5 rounded-full',
-              c.id === currentChapter.id
+              m.id === view.mapId
                 ? 'bg-gold-300'
-                : c.cleared
+                : m.cleared
                   ? 'bg-jade-500/70'
                   : 'bg-ink-700',
             )}

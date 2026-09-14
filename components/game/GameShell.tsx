@@ -1,13 +1,12 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { BottomTab, ModalKind, Screen } from '@/lib/navigation'
 import type { Treasure } from '@/lib/game-data'
-import type { GameSave } from '@/lib/game/types'
 import { BottomNavigation } from './BottomNavigation'
 import { LoginScreen } from './screens/LoginScreen'
 import { MainScreen } from './screens/MainScreen'
-import { BattleScreen } from './screens/BattleScreen'
+import { BattleScreen, type BattleFinishView } from './screens/BattleScreen'
 import { InventoryScreen } from './screens/InventoryScreen'
 import { CharacterScreen } from './screens/CharacterScreen'
 import { BuildScreen } from './screens/BuildScreen'
@@ -20,8 +19,9 @@ import { RankingScreen } from './screens/RankingScreen'
 import { EquipmentModal } from './modals/EquipmentModal'
 import { TreasureModal } from './modals/TreasureModal'
 import { IdleModal } from './modals/IdleModal'
-import { BossFailModal } from './modals/BossFailModal'
-import { createDemoSave } from './demoSave'
+import { useGameStore } from '@/lib/game/state/store'
+import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
+import { StoryFlow } from './overlays/StoryFlow'
 
 const SCREEN_TAB: Partial<Record<Screen, BottomTab>> = {
   cave: 'cave',
@@ -38,22 +38,75 @@ export function GameShell() {
   const [modal, setModal] = useState<ModalKind>(null)
   const [treasure, setTreasure] = useState<Treasure | null>(null)
   const [equipName, setEquipName] = useState<string | undefined>(undefined)
-  const [stage, setStage] = useState(1)
 
-  /* 存档快照：状态层（lib/game/state）落地前先用演示存档。
-     战斗期间使用冻结快照，避免战斗过程中的存档变化打断战斗。 */
-  const [save, setSave] = useState<GameSave>(() => createDemoSave())
-  const [battleSave, setBattleSave] = useState<GameSave>(() =>
-    createDemoSave(),
-  )
-  const [battleRun, setBattleRun] = useState(0)
-  const saveRef = useRef(save)
-  saveRef.current = save
+  const save = useGameStore((s) => s.save)
+  const battle = useGameStore((s) => s.battle)
+  const startBattle = useGameStore((s) => s.startBattle)
+  const finishBattle = useGameStore((s) => s.finishBattle)
+
+  /* 进入游戏后结算一次挂机收益 */
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      useGameStore.getState().claimIdle()
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  /* 切后台再回前台时补算挂机收益 */
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') useGameStore.getState().claimIdle()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
+  /* 奇遇计时：不在战斗中时每秒递减冷却，冷却归零则抽一个奇遇入队 */
+  useEffect(() => {
+    if (screen === 'battle' || screen === 'login') return
+    const id = window.setInterval(() => {
+      const g = useGameStore.getState()
+      if (g.save.story.pending.length >= 2) {
+        g.tickEncounter(1)
+        return
+      }
+      if (g.save.story.encounterCooldown > 0) {
+        g.tickEncounter(1)
+        return
+      }
+      g.rollEncounter()
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [screen])
 
   const openTreasure = useCallback((t: Treasure) => {
     setTreasure(t)
     setModal('treasure')
   }, [])
+
+  /** 由法宝 defId 构造详情弹窗数据（战斗页点冷却环时用） */
+  const openTreasureById = useCallback(
+    (defId: string) => {
+      const def = TREASURE_BY_ID[defId]
+      if (!def) return
+      const owned = useGameStore
+        .getState()
+        .save.combat.ownedTreasures.find((x) => x.defId === defId)
+      openTreasure({
+        id: def.id,
+        name: def.name,
+        level: owned?.level ?? 1,
+        quality: def.quality as Treasure['quality'],
+        icon: def.icon,
+        cooldown: def.cooldown,
+        ready: 1,
+        damage: '—',
+        type: def.kind === 'passive' ? '被动' : '主动',
+        desc: def.desc,
+      })
+    },
+    [openTreasure],
+  )
 
   const openEquipment = useCallback((name?: string) => {
     setEquipName(name)
@@ -62,77 +115,26 @@ export function GameShell() {
 
   const closeModal = useCallback(() => setModal(null), [])
 
-  /** 以当前存档与关卡开一场新战斗 */
   const beginBattle = useCallback(() => {
-    const snapshot: GameSave = {
-      ...saveRef.current,
-      progress: {
-        ...saveRef.current.progress,
-        stage,
-        mapStage: ((stage - 1) % 50) + 1,
-      },
-    }
-    setBattleSave(snapshot)
-    setBattleRun((v) => v + 1)
+    startBattle()
     setScreen('battle')
-  }, [stage])
+  }, [startBattle])
 
-  /** 胜利：结算掉落与进度，停在结算画面等玩家选择 */
-  const handleBattleWin = useCallback(
-    ({ damage }: { drops: unknown[]; damage: number; dps: number }) => {
-      setSave((prev) => {
-        const nextStage = prev.progress.stage + 1
-        return {
-          ...prev,
-          updatedAt: Date.now(),
-          progress: {
-            ...prev.progress,
-            stage: nextStage,
-            mapStage: ((nextStage - 1) % 50) + 1,
-            maxStage: Math.max(prev.progress.maxStage, prev.progress.stage),
-            stableStage: Math.max(prev.progress.stableStage, prev.progress.stage - 3),
-          },
-          stats: {
-            ...prev.stats,
-            kills: prev.stats.kills + 1,
-            playTime: prev.stats.playTime + Math.round(damage / 1000),
-          },
-        }
-      })
+  const handleFinishBattle = useCallback(
+    (win: boolean, failReason?: string): BattleFinishView => {
+      const r = finishBattle(win, { failReason })
+      return {
+        win,
+        drops: r.drops,
+        stone: r.reward.stone,
+        cultivation: r.reward.cultivation,
+        failReason,
+        storyPending: r.storyPending,
+        realmBundle: r.realm?.reward,
+      }
     },
-    [],
+    [finishBattle],
   )
-
-  const handleBattleLose = useCallback(({ failReason }: { failReason?: string }) => {
-    setSave((prev) => ({ ...prev, stats: { ...prev.stats, deaths: prev.stats.deaths + 1 } }))
-    if (failReason) {
-      setSave((prev) => ({
-        ...prev,
-        log: [
-          {
-            id: `lose_${Date.now()}`,
-            time: Date.now(),
-            text: failReason,
-            kind: 'battle' as const,
-          },
-          ...prev.log.slice(0, 49),
-        ],
-      }))
-    }
-  }, [])
-
-  /** 继续推关：推进关卡并重开一场战斗 */
-  const handleNextStage = useCallback(() => {
-    setStage((v) => {
-      const next = v + 1
-      setBattleSave({
-        ...saveRef.current,
-        progress: { ...saveRef.current.progress, stage: next, mapStage: ((next - 1) % 50) + 1 },
-      })
-      return next
-    })
-    setBattleRun((v) => v + 1)
-  }, [])
 
   const showNav = !NAV_SCREENS.includes(screen)
   const activeTab = SCREEN_TAB[screen] ?? 'cave'
@@ -152,17 +154,26 @@ export function GameShell() {
           />
         )
       case 'battle':
+        if (!battle) {
+          return (
+            <div className="flex h-full items-center justify-center bg-ink-950">
+              <button
+                type="button"
+                onClick={() => setScreen('home')}
+                className="font-serif text-sm text-cream-faint"
+              >
+                战斗已结束 · 点击返回
+              </button>
+            </div>
+          )
+        }
         return (
           <BattleScreen
-            key={battleRun}
-            save={battleSave}
-            stage={stage}
-            onBack={() => setScreen('home')}
-            onBattleWin={handleBattleWin}
-            onBattleLose={handleBattleLose}
-            onNextStage={handleNextStage}
-            onOpenTreasure={openTreasure}
+            battle={battle}
+            save={save}
+            onFinishBattle={handleFinishBattle}
             onExit={() => setScreen('home')}
+            onOpenTreasure={openTreasureById}
           />
         )
       case 'inventory':
@@ -234,11 +245,12 @@ export function GameShell() {
           treasure={treasure}
         />
         <IdleModal open={modal === 'idle'} onClose={closeModal} />
-        <BossFailModal
-          open={modal === 'bossFail'}
-          onClose={closeModal}
-          onRetry={() => setModal(null)}
-        />
+        <div className="pointer-events-none absolute inset-0 z-[70] [&>*]:pointer-events-auto">
+          <StoryFlow
+            enabled={screen !== 'battle' && screen !== 'login' && modal === null}
+            onResolved={() => setModal(null)}
+          />
+        </div>
       </div>
     </div>
   )

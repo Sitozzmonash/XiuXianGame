@@ -120,7 +120,7 @@ export const STORY_NODES: StoryNode[] = [
           { type: 'karma_add', key: 'taixuAttention', value: 2 },
           { type: 'karma_add', key: 'qingxuanFame', value: 1 },
           { type: 'relation_add', key: 'shen_qinghe', value: 3 },
-          { type: 'give_treasure', key: 'tres_yin_yu_fu' },
+          { type: 'give_treasure', key: 'tr_xuangui_shell' },
           {
             type: 'log',
             value: '那修士接过古玉，神色骤变，反手塞你一道阴玉符便匆匆离去。',
@@ -170,7 +170,7 @@ export const STORY_NODES: StoryNode[] = [
         text: '取下御兽符带走',
         effects: [
           { type: 'flag_set', key: 'has_yushou_fu', value: true },
-          { type: 'give_treasure', key: 'tres_yu_shou_fu' },
+          { type: 'give_treasure', key: 'tr_jingang_bell' },
           { type: 'karma_add', key: 'jadeResonance', value: 1 },
           { type: 'log', value: '御兽符离了神像，庙外的兽吼在这一刻齐齐停了。' },
         ],
@@ -252,7 +252,7 @@ export const STORY_NODES: StoryNode[] = [
           { type: 'flag_set', key: 'nail_burned', value: true },
           { type: 'karma_add', key: 'daoHeart', value: 2 },
           { type: 'give_cultivation', value: 800 },
-          { type: 'give_pet', key: 'pet_qing_mu_lu' },
+          { type: 'give_pet', key: 'pet_qingmu_deer' },
           { type: 'unlock', key: 'chapter_2' },
           {
             type: 'log',
@@ -491,7 +491,7 @@ export const STORY_NODES: StoryNode[] = [
           { type: 'karma_add', key: 'daoHeart', value: 1 },
           { type: 'karma_add', key: 'qingxuanFame', value: 3 },
           { type: 'karma_add', key: 'demonThought', value: -1 },
-          { type: 'give_treasure', key: 'tres_hun_fan' },
+          { type: 'give_treasure', key: 'tr_shehun_banner' },
           {
             type: 'log',
             value: '黑风道人死于你剑下。魂幡焚尽，幡上数十张脸在火里散开。',
@@ -509,7 +509,7 @@ export const STORY_NODES: StoryNode[] = [
           { type: 'flag_set', key: 'took_shihun', value: true },
           { type: 'karma_add', key: 'demonThought', value: 1 },
           { type: 'karma_add', key: 'daoHeart', value: -1 },
-          { type: 'give_technique', key: 'tech_canpian_shihun_jue' },
+          { type: 'give_technique', key: 'tech_shihun_jue' },
           { type: 'npc_state', key: 'heifeng_daoren', value: 'crippled' },
           {
             type: 'log',
@@ -972,7 +972,7 @@ export const STORY_NODES: StoryNode[] = [
         effects: [
           { type: 'flag_set', key: 'stele_insight', value: true },
           { type: 'karma_add', key: 'jadeResonance', value: 2 },
-          { type: 'give_technique', key: 'tech_wuming_jianzhang_shang' },
+          { type: 'give_technique', key: 'tech_wuming_jianzhang' },
           { type: 'give_cultivation', value: 900 },
           { type: 'unlock', key: 'sword_insight' },
           {
@@ -1047,8 +1047,8 @@ export const STORY_NODES: StoryNode[] = [
           { type: 'flag_set', key: 'coop_xie', value: true },
           { type: 'relation_add', key: 'xie_wuchen', value: 25 },
           { type: 'karma_add', key: 'qingxuanFame', value: 2 },
-          { type: 'give_technique', key: 'tech_luoxia_jian_yi' },
-          { type: 'give_treasure', key: 'tres_liu_xia_jian_pai' },
+          { type: 'give_technique', key: 'tech_qingfeng_jianyi' },
+          { type: 'give_treasure', key: 'tr_qingxiao_sword' },
           {
             type: 'log',
             value: '你把碑上剑痕拓给谢无尘。他看了很久，把一枚落霞剑牌按进你掌心。',
