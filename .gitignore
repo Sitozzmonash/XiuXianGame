@@ -25,3 +25,6 @@ venv/
 
 # 乙方自检产物
 scripts/_probe.ts
+
+# Next.js 自动生成，版本随构建环境在 dev/prod 间翻转
+next-env.d.ts
