@@ -28,6 +28,9 @@ import { StoryFlow } from './overlays/StoryFlow'
 import { SagaBook } from './overlays/SagaBook'
 import { BreakthroughOverlay } from './overlays/BreakthroughOverlay'
 import { OnboardingToast } from './OnboardingToast'
+import { CloudSyncBadge } from './CloudSyncBadge'
+import { bootstrapCloud } from '@/lib/game/api/cloud'
+import { trackEvent } from '@/lib/game/api/analytics'
 
 const SCREEN_TAB: Partial<Record<Screen, BottomTab>> = {
   cave: 'cave',
@@ -85,6 +88,11 @@ export function GameShell() {
     if (!check.can) return
     const res = g.doBreakthrough()
     playSfx(res.outcome.success ? 'breakthrough' : 'defeat')
+    trackEvent('realm_breakthrough', {
+      from: res.outcome.fromLabel,
+      to: res.outcome.success ? res.outcome.toLabel : null,
+      success: res.outcome.success,
+    })
     setBt({
       fromLabel: res.outcome.fromLabel,
       toLabel: res.outcome.success ? res.outcome.toLabel : null,
@@ -99,10 +107,22 @@ export function GameShell() {
     })
   }, [])
 
-  /* 进入游戏后结算一次挂机收益 */
+  /* 进入游戏后结算一次挂机收益 + 启动云存档同步 */
   useEffect(() => {
+    void bootstrapCloud()
     const t = window.setTimeout(() => {
-      useGameStore.getState().claimIdle()
+      const res = useGameStore.getState().claimIdle()
+      if (res.stone > 0 || res.cultivation > 0) {
+        trackEvent('idle_claim', {
+          stone: res.stone,
+          cultivation: res.cultivation,
+          duration: res.duration,
+          capped: res.capped,
+        })
+        if (res.duration >= 300) {
+          trackEvent('offline_duration', { duration: res.duration, capped: res.capped })
+        }
+      }
     }, 400)
     return () => window.clearTimeout(t)
   }, [])
@@ -150,6 +170,17 @@ export function GameShell() {
     return () => window.clearInterval(id)
   }, [screen])
 
+  /* 切后台时记录最后停留页面（PRD 49） */
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') {
+        trackEvent('last_page_before_leave', { screen })
+      }
+    }
+    document.addEventListener('visibilitychange', onHidden)
+    return () => document.removeEventListener('visibilitychange', onHidden)
+  }, [screen])
+
   const openTreasure = useCallback((t: TreasureDetail) => {
     setTreasure(t)
     setModal('treasure')
@@ -188,11 +219,19 @@ export function GameShell() {
 
   const beginBattle = useCallback(() => {
     startBattle()
+    const g = useGameStore.getState()
+    trackEvent('stage_start', { stage: g.battleStage, kind: g.battleKind })
     setScreen('battle')
   }, [startBattle])
 
   const handleFinishBattle = useCallback(
     (win: boolean, failReason?: string): BattleFinishView => {
+      const g = useGameStore.getState()
+      const stage = g.battleStage
+      trackEvent('stage_end', { stage, win, kind: g.battleKind })
+      if (!win && g.battleKind === 'stage' && stage % 50 === 0) {
+        trackEvent('boss_fail', { stage, reason: failReason ?? null })
+      }
       const r = finishBattle(win, { failReason })
       return {
         win,
@@ -310,6 +349,7 @@ export function GameShell() {
           {showNav && (
             <BottomNavigation active={activeTab} onNavigate={setScreen} />
           )}
+          {screen !== 'login' && screen !== 'battle' && realmId === null && <CloudSyncBadge />}
         </div>
 
         <EquipmentModal

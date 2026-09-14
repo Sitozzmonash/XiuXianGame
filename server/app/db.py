@@ -32,9 +32,17 @@ def _engine_kwargs(url: str) -> dict:
     return {"pool_pre_ping": True, "pool_size": 5, "max_overflow": 10}
 
 
+def _normalize_url(url: str) -> str:
+    """把 Neon / Heroku 等平台给出的 postgresql:// 或 postgres:// 规范化为 psycopg3 方言串。"""
+    for scheme in ("postgresql://", "postgres://"):
+        if url.startswith(scheme):
+            return "postgresql+psycopg://" + url[len(scheme):]
+    return url
+
+
 def create_db_engine(url: str | None = None) -> Engine:
     """创建数据库引擎（不填 url 则用配置里的 DATABASE_URL）。"""
-    url = url or get_settings().database_url
+    url = _normalize_url(url or get_settings().database_url)
     return create_engine(url, **_engine_kwargs(url))
 
 

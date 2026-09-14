@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     app_name: str = "凡尘问道 云存档后端"
     app_version: str = "0.1.0"
     debug: bool = False
+    # 路由统一前缀；Vercel Services 按 /api/* 转发且保留原始路径，故生产设为 /api，本机留空
+    api_prefix: str = ""
 
     # ---- 存储 ----
     database_url: str = "sqlite:///./fanchen.db"

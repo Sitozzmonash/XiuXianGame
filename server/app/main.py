@@ -2,6 +2,10 @@
 
 启动：
     cd server && uvicorn app.main:app --reload --port 8000
+
+部署到 Vercel（Services 按 /api/* 转发并保留原始路径）时，设环境变量
+API_PREFIX=/api，同一应用即以 /api/auth/guest、/api/save 等路径对外服务；
+本机开发保持空前缀不变。
 """
 
 import logging
@@ -18,41 +22,48 @@ from app.routers import analytics, auth, save
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("fanchen")
 
-settings = get_settings()
-
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """启动时建表（幂等）；生产可改用 sql/schema.sql 或迁移工具。"""
     init_db()
-    logger.info("database ready: %s", settings.database_url)
+    logger.info("database ready: %s", get_settings().database_url.split("@")[-1])
     yield
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    description="《凡尘问道》H5 挂机修仙 · 云存档 / 多端登录 / 埋点后端（PRD 42、43、49）",
-    lifespan=lifespan,
-)
+def create_app() -> FastAPI:
+    """装配应用；路由前缀由配置 api_prefix 决定（本机空，Vercel 生产 /api）。"""
+    settings = get_settings()
+    prefix = settings.api_prefix.rstrip("/")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=False,  # token 走 Authorization 头，无需携带 Cookie
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.app_version,
+        description="《凡尘问道》H5 挂机修仙 · 云存档 / 多端登录 / 埋点后端（PRD 42、43、49）",
+        lifespan=lifespan,
+    )
 
-app.include_router(auth.router)
-app.include_router(save.router)
-app.include_router(analytics.router)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=False,  # token 走 Authorization 头，无需携带 Cookie
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(auth.router, prefix=prefix)
+    app.include_router(save.router, prefix=prefix)
+    app.include_router(analytics.router, prefix=prefix)
+
+    @app.get(f"{prefix}/health", tags=["meta"])
+    def health() -> dict[str, str]:
+        """健康检查：返回状态、当前时间与服务版本。"""
+        return {"status": "ok", "time": iso_utc(utcnow()), "version": settings.app_version}
+
+    return app
 
 
-@app.get("/health", tags=["meta"])
-def health() -> dict[str, str]:
-    """健康检查：返回状态、当前时间与服务版本。"""
-    return {"status": "ok", "time": iso_utc(utcnow()), "version": settings.app_version}
+app = create_app()
 
 
 if __name__ == "__main__":  # pragma: no cover - 本地便捷启动

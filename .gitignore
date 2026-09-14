@@ -6,8 +6,16 @@ __v0_jsx-dev-runtime.ts
 .v0-trash/
 .vercel/
 
-# Environment variables
+# Environment variables（真实 .env 永不入库，仅 .env.example 模板可提交）
 .env*.local
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# 本机 SQLite 开发库
+*.db
+*.db-journal
 
 # Common ignores
 node_modules
