@@ -16,6 +16,7 @@ export type Screen =
   | 'welfare'
   | 'map'
   | 'market'
+  | 'mall'
   | 'settings'
 
 export type ModalKind =

@@ -7,6 +7,7 @@ import { ResourceValue } from './primitives'
 import { useGameStore } from '@/lib/game/state/store'
 import { power } from '@/lib/game/state/selectors'
 import { flatStage } from '@/lib/game/config/realms'
+import { skinArt } from '@/lib/game/config/skins'
 import { formatNumber } from '@/lib/game/utils'
 
 export function ResourceBar({
@@ -54,7 +55,7 @@ export function PlayerProfile({
     >
       <span className="relative size-11 shrink-0 overflow-hidden rounded-full ring-2 ring-gold-300/50">
         <Image
-          src="/images/player-portrait.png"
+          src={skinArt(save.appearance?.skin)}
           alt={save.profile.name}
           fill
           sizes="44px"

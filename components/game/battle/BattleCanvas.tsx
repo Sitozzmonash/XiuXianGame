@@ -106,7 +106,8 @@ function computeGeo(w: number, h: number, isBoss: boolean): Geo {
     groundY,
     playerX: w * 0.24,
     playerFeet: groundY,
-    enemyX: w * 0.76,
+    // 窄竖屏下 Boss 立绘很宽，站位比普通怪更靠中，避免整只贴出右缘
+    enemyX: w * (isBoss ? 0.68 : 0.76),
     enemyFeet: h * (isBoss ? 0.8 : 0.82),
     playerH: 0.3 * h,
     enemyH,
@@ -162,18 +163,26 @@ function drawEntitySprite(
   x: number,
   feetY: number,
   h: number,
+  maxW: number,
   variant: 'human' | 'beast',
   palette: SilhouettePalette,
   flash: number,
 ): void {
   if (spriteReady(img)) {
     const ratio = img.naturalWidth / img.naturalHeight
-    const w = h * ratio
-    ctx.drawImage(img, x - w / 2, feetY - h, w, h)
+    // 宽幅立绘（蜈蚣、地龙之类）按高度缩放会横向溢出画面，
+    // 统一塞进 h × maxW 的包围盒：取较小缩放，脚底对齐 feetY。
+    let w = h * ratio
+    let hh = h
+    if (w > maxW) {
+      w = maxW
+      hh = w / ratio
+    }
+    ctx.drawImage(img, x - w / 2, feetY - hh, w, hh)
     if (flash > 0) {
       ctx.globalCompositeOperation = 'lighter'
       ctx.globalAlpha = flash * 0.35
-      ctx.drawImage(img, x - w / 2, feetY - h, w, h)
+      ctx.drawImage(img, x - w / 2, feetY - hh, w, hh)
       ctx.globalCompositeOperation = 'source-over'
       ctx.globalAlpha = 1
     }
@@ -921,6 +930,7 @@ function drawScene(d: DrawCtx): void {
     geo.enemyX,
     eFeet,
     eH,
+    geo.w * (geo.isBoss ? 0.56 : 0.44),
     geo.isBoss ? 'beast' : 'human',
     ENEMY_PALETTE,
     scene.enemyFlash,
@@ -935,6 +945,7 @@ function drawScene(d: DrawCtx): void {
     geo.playerX,
     geo.playerFeet + pBob,
     geo.playerH,
+    geo.w * 0.42,
     'human',
     PLAYER_PALETTE,
     scene.playerFlash,

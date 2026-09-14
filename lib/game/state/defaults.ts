@@ -97,6 +97,10 @@ export function createNewSave(now = Date.now(), rng: () => number = Math.random)
     karma,
     realmRun: null,
     idle: { lastClaim: now },
+    appearance: {
+      skin: 'default',
+      ownedSkins: ['default'],
+    },
     welfare: {
       // 用「昨天」作为初始值：新号当天即可签到，且首签不计入连续天数
       lastSignInDay: localDayIndex(now) - 1,

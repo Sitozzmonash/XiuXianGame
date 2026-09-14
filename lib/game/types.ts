@@ -689,6 +689,13 @@ export interface GameSave {
    * 服务端只做排序与展示，不参与任何数值结算。
    */
   rank?: RankSummary
+  /** 外观：皮肤穿戴与拥有状态（表现层专用，不参与数值） */
+  appearance: {
+    /** 当前穿戴的皮肤 id */
+    skin: string
+    /** 已拥有的皮肤 id */
+    ownedSkins: string[]
+  }
   stats: {
     kills: number
     elites: number

@@ -65,7 +65,7 @@ export function MarketScreen({ onBack }: { onBack: () => void }) {
             {formatNumber(save.resources.stone)}
           </span>
           <span className="ml-auto font-serif text-[10px] text-cream-faint">
-            坊市只收灵石，不出售装备
+            丹药材料在此 · 装备与皮肤请移步商城
           </span>
         </Panel>
 

@@ -365,6 +365,14 @@ async function push(retried = false): Promise<void> {
       const payload = err.payload as SaveConflictPayload
       if (payload && typeof payload.server_version === 'number' && payload.server_save) {
         adoptServerSave(payload.server_save, payload.server_version)
+      } else if (payload && payload.server_save == null && meta) {
+        // 服务端存档已不存在（如运维重置）：版本号归零，15s 后下一轮推送自动重建，
+        // 否则客户端永远带着旧 base_version 重试，同步徽标卡在「同步中」
+        meta.version = 0
+        meta.hasSave = false
+        persistMeta()
+        setStatus({ status: 'error', version: 0, message: '云端存档缺失，稍后自动重建' })
+        schedulePush()
       }
     } else if (err instanceof ApiError && err.status === 401 && !retried) {
       meta.token = null
@@ -419,7 +427,8 @@ async function initialSync(): Promise<void> {
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      meta.hasSave = false // 云端无存档：把本地推上去
+      meta.hasSave = false // 云端无存档：把本地推上去（base_version 归零，走「新建」路径）
+      meta.version = 0
       persistMeta()
       dirty = true
       await push()

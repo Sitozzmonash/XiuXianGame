@@ -15,11 +15,13 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 import {
   MAPS,
   MARKET_GOODS,
+  MALL_ITEMS,
   MONSTER_BY_ID,
   PLAY_TIME_MILESTONES,
   TREASURE_BY_ID,
   TECHNIQUE_BY_ID,
   NPC_BY_ID,
+  exchangeStone,
   getStage,
   globalToMap,
   signInReward,
@@ -76,7 +78,8 @@ import {
   type EffectBundle,
 } from '../engine/story'
 import { PILL_BY_ID } from '../config/pills'
-import { localDayIndex, makeRng, uid } from '../utils'
+import { SKIN_BY_ID } from '../config/skins'
+import { localDayIndex, makeRng, uid, formatNumber } from '../utils'
 import {
   QUALITY_ORDER,
   type Drop,
@@ -482,6 +485,10 @@ export interface GameStore {
   /* 坊市 */
   buyGood: (goodId: string, times?: number) => BuyResult
 
+  /* 商城 */
+  mallBuy: (itemId: string) => MallBuyResult
+  equipSkin: (skinId: string) => boolean
+
   /* 测试工具（仅 is_admin 账号在设置页可见） */
   adminGrant: (kind: 'stone' | 'cultivation' | 'immortalJade', amount: number) => void
   adminJumpTo: (stage: number) => boolean
@@ -506,6 +513,13 @@ export interface BuyResult {
   cost?: number
   /** 实际到手的数量 */
   count?: number
+}
+
+export interface MallBuyResult {
+  ok: boolean
+  reason?: string
+  /** 成功时的结算描述（toast / 弹窗用） */
+  text?: string
 }
 
 /* ------------------------------ store ------------------------------ */
@@ -1445,6 +1459,86 @@ export const useGameStore = create<GameStore>()(
             }
           })
           return { ok: true, cost, count: amount }
+        },
+
+        /* ------------------------------ 商城 ------------------------------ */
+
+        mallBuy: (itemId) => {
+          const item = MALL_ITEMS.find((m) => m.id === itemId)
+          if (!item) return { ok: false, reason: '商城里没有这件东西' }
+          const s0 = get().save
+          if (s0.progress.maxStage < item.unlockStage) {
+            return { ok: false, reason: `通关第 ${item.unlockStage} 关后上架` }
+          }
+          const bank = item.currency === 'jade' ? s0.resources.immortalJade : s0.resources.stone
+          if (bank < item.price) {
+            return { ok: false, reason: item.currency === 'jade' ? '仙玉不足' : '灵石不足' }
+          }
+
+          if (item.section === 'skin') {
+            const skin = item.skinId ? SKIN_BY_ID[item.skinId] : undefined
+            if (!skin) return { ok: false, reason: '这件皮肤已下架' }
+            if (s0.appearance.ownedSkins.includes(skin.id)) {
+              return { ok: false, reason: '已拥有这件皮肤' }
+            }
+            mutate((s) => {
+              s.resources.immortalJade -= item.price
+              s.appearance.ownedSkins.push(skin.id)
+              s.appearance.skin = skin.id
+              pushLog(s, `购得皮肤「${skin.name}」，已换上新衣。`, 'reward')
+            })
+            return { ok: true, text: `已换上「${skin.name}」` }
+          }
+
+          if (item.section === 'equip' && !item.treasureBox) {
+            if (s0.inventory.items.length >= s0.inventory.capacity) {
+              return { ok: false, reason: '行囊已满，先清理一下再买' }
+            }
+            const stage = Math.max(1, s0.progress.maxStage || s0.progress.stage)
+            const rng = makeRng((Date.now() ^ (item.price * 7919)) >>> 0)
+            const equip = rollEquipment({ stage, quality: item.equipQuality, rng: () => rng.next() })
+            mutate((s) => {
+              s.resources.stone -= item.price
+              s.inventory.items.push(equip)
+              pushLog(s, `开启「${item.name}」：得到 ${equip.name}。`, 'reward')
+            })
+            return { ok: true, text: `开出「${equip.name}」` }
+          }
+
+          if (item.treasureBox) {
+            const stage = Math.max(1, s0.progress.maxStage || s0.progress.stage)
+            const pool = TREASURES.filter(
+              (t) =>
+                !s0.combat.ownedTreasures.some((x) => x.defId === t.id) &&
+                (t.unlockStage ?? 1) <= stage + 20,
+            )
+            if (pool.length === 0) return { ok: false, reason: '法宝已集齐，无需再买' }
+            const rng = makeRng((Date.now() ^ 0x9e3779b9) >>> 0)
+            const picked = pool[rng.int(0, pool.length - 1)]
+            mutate((s) => {
+              s.resources.immortalJade -= item.price
+              grantTreasure(s, picked.id)
+            })
+            return { ok: true, text: `开出法宝「${picked.name}」` }
+          }
+
+          const amount = exchangeStone(item.stone ?? 0, s0.progress.maxStage)
+          mutate((s) => {
+            s.resources.immortalJade -= item.price
+            s.resources.stone += amount
+            pushLog(s, `${item.name}：仙玉 -${item.price}，灵石 +${amount}。`, 'reward')
+          })
+          return { ok: true, text: `灵石 +${formatNumber(amount)}` }
+        },
+
+        equipSkin: (skinId) => {
+          const s0 = get().save
+          if (!SKIN_BY_ID[skinId] || !s0.appearance.ownedSkins.includes(skinId)) return false
+          if (s0.appearance.skin === skinId) return true
+          mutate((s) => {
+            s.appearance.skin = skinId
+          })
+          return true
         },
 
         /* ------------------------------ 测试工具 ------------------------------ */

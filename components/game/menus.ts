@@ -20,6 +20,7 @@ export interface MenuEntry {
 export const LeftMenu: MenuEntry[] = [
   { id: 'realm-explore', label: '秘境', icon: 'array', screen: 'dungeon' },
   { id: 'welfare', label: '福利', icon: 'gift', screen: 'welfare', redDot: true },
+  { id: 'mall', label: '商城', icon: 'pouch', screen: 'mall', redDot: true },
   { id: 'sect', label: '宗门', icon: 'gate', screen: 'sect' },
   { id: 'fate', label: '仙缘', icon: 'lotus', screen: 'ranking' },
 ]

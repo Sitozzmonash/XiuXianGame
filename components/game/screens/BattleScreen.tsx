@@ -7,6 +7,7 @@ import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { PET_BY_ID } from '@/lib/game/config/pets'
 import { qualityRank } from '@/lib/game/ui-tokens'
 import { monsterArt } from '@/lib/game/ui-art'
+import { skinArt } from '@/lib/game/config/skins'
 import { useGameStore } from '@/lib/game/state/store'
 import { playBattleEventSfx, playSfx } from '@/lib/game/audio'
 import { stageView } from '@/lib/game/state/selectors'
@@ -219,7 +220,7 @@ export function BattleScreen({
           enemy={enemyView}
           player={{
             name: save.profile.name || '无名散修',
-            image: '/images/player-swordsman.png',
+            image: skinArt(save.appearance?.skin),
           }}
           width={size.width}
           height={size.height}

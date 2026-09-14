@@ -86,8 +86,9 @@ export interface SavePostResponse {
 export interface SaveConflictPayload {
   code: 'save_conflict'
   message: string
+  /** 服务端存档已不存在（如数据重置）时为 null */
   server_save: unknown
-  server_version: number
+  server_version: number | null
   updated_at: string | null
 }
 

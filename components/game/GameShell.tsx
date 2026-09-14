@@ -22,6 +22,7 @@ import { RankingScreen } from './screens/RankingScreen'
 import { WelfareScreen } from './screens/WelfareScreen'
 import { MapScreen } from './screens/MapScreen'
 import { MarketScreen } from './screens/MarketScreen'
+import { MallScreen } from './screens/MallScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { SecretRealmFlow } from './screens/SecretRealmFlow'
 import { EquipmentModal } from './modals/EquipmentModal'
@@ -331,6 +332,7 @@ export function GameShell() {
             onBack={() => setScreen('home')}
             onSelectSlot={(slot) => openEquipment(slot.item?.name)}
             onOpenBuild={() => setScreen('build')}
+            onOpenMall={() => setScreen('mall')}
           />
         )
       case 'build':
@@ -360,6 +362,8 @@ export function GameShell() {
         return <MapScreen onBack={() => setScreen('home')} />
       case 'market':
         return <MarketScreen onBack={() => setScreen('home')} />
+      case 'mall':
+        return <MallScreen onBack={() => setScreen('home')} />
       case 'settings':
         return <SettingsScreen onBack={() => setScreen('home')} />
       case 'dungeon':

@@ -13,6 +13,7 @@ import {
   type SpiritRootQuality,
 } from '@/lib/game/types'
 import { flatStage } from '@/lib/game/config/realms'
+import { SKINS, skinArt } from '@/lib/game/config/skins'
 import { equipArt } from '@/lib/game/ui-art'
 import { playerCombatant } from '@/lib/game/engine/battle'
 import { useGameStore } from '@/lib/game/state/store'
@@ -31,7 +32,7 @@ import {
   type EquipmentView,
 } from '../viewModels'
 
-const TABS = ['属性', '流派', '灵根', '功法'] as const
+const TABS = ['属性', '流派', '灵根', '功法', '皮肤'] as const
 
 const ELEMENT_LABEL: Record<Element, string> = {
   metal: '金',
@@ -148,16 +149,19 @@ export function CharacterScreen({
   onBack,
   onSelectSlot,
   onOpenBuild,
+  onOpenMall,
 }: {
   onBack: () => void
   onSelectSlot: (slot: SlotTarget) => void
   onOpenBuild?: () => void
+  onOpenMall?: () => void
 }) {
   const [tab, setTab] = useState<string>(TABS[0])
   const [hint, setHint] = useState<string | null>(null)
 
   const save = useGameStore((s) => s.save)
   const autoEquip = useGameStore((s) => s.autoEquip)
+  const equipSkin = useGameStore((s) => s.equipSkin)
 
   const slots: SlotRow[] = EQUIP_SLOTS.map((id) => {
     const equipped = save.combat.equipment[id]
@@ -202,7 +206,7 @@ export function CharacterScreen({
 
           <div className="relative h-56 flex-1">
             <Image
-              src="/images/player-swordsman.png"
+              src={skinArt(save.appearance.skin)}
               alt={save.profile.name}
               fill
               sizes="220px"
@@ -349,6 +353,72 @@ export function CharacterScreen({
                       </span>
                     </span>
                     <QualityBadge quality={view.quality} className="ml-auto shrink-0" />
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {tab === '皮肤' && (
+            <ul className="grid grid-cols-2 gap-2.5">
+              {SKINS.map((skin) => {
+                const owned = save.appearance.ownedSkins.includes(skin.id)
+                const wearing = save.appearance.skin === skin.id
+                return (
+                  <li
+                    key={skin.id}
+                    className="overflow-hidden rounded-md border bg-ink-950/60"
+                    style={{
+                      borderColor: wearing ? 'rgba(58,157,139,0.6)' : 'rgba(232,200,119,0.15)',
+                      boxShadow: wearing ? '0 0 12px rgba(58,157,139,0.25)' : undefined,
+                    }}
+                  >
+                    <div className="relative h-36 bg-gradient-to-b from-ink-800/60 to-ink-950">
+                      <img
+                        src={skin.image}
+                        alt={skin.name}
+                        className="size-full object-contain object-bottom drop-shadow-[0_6px_16px_rgba(0,0,0,0.8)]"
+                        style={{ filter: owned ? undefined : 'grayscale(0.85) opacity(0.7)' }}
+                      />
+                      {wearing && (
+                        <span className="absolute left-1.5 top-1.5 rounded-[3px] bg-jade-500/90 px-1.5 font-serif text-[9px] font-bold leading-[15px] text-ink-950">
+                          穿戴中
+                        </span>
+                      )}
+                    </div>
+                    <div className="px-2.5 pb-2.5 pt-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-serif text-xs font-bold text-cream">
+                          {skin.name}
+                        </span>
+                        <QualityBadge quality={skin.quality} />
+                      </span>
+                      <p className="mt-0.5 line-clamp-1 text-[10px] text-cream-faint">{skin.desc}</p>
+                      <div className="mt-2">
+                        {owned ? (
+                          <InkButton
+                            variant={wearing ? 'ghost' : 'jade'}
+                            size="sm"
+                            className="min-h-7 w-full"
+                            disabled={wearing}
+                            onClick={() => {
+                              if (equipSkin(skin.id)) setHint(`已换上「${skin.name}」`)
+                            }}
+                          >
+                            {wearing ? '本命装' : '穿戴'}
+                          </InkButton>
+                        ) : (
+                          <InkButton
+                            variant="primary"
+                            size="sm"
+                            className="min-h-7 w-full"
+                            onClick={onOpenMall}
+                          >
+                            <Sparkles className="size-3" />
+                            {skin.price} 仙玉
+                          </InkButton>
+                        )}
+                      </div>
+                    </div>
                   </li>
                 )
               })}
