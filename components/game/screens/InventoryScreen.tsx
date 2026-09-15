@@ -8,7 +8,7 @@ import { PILL_BY_ID, PILL_CATEGORY_LABEL, type PillDef } from '@/lib/game/config
 import { expandCost, salvageValue } from '@/lib/game/engine/loot'
 import { useGameStore } from '@/lib/game/state/store'
 import { bagSummary } from '@/lib/game/state/selectors'
-import { equipArt, treasureArt } from '@/lib/game/ui-art'
+import { equipArt, pillArt, treasureArt } from '@/lib/game/ui-art'
 import { formatNumber } from '@/lib/game/utils'
 import { ScreenFrame, SubHeader } from '../ScreenFrame'
 import { BuildTabs } from '../Tabs'
@@ -324,6 +324,7 @@ export function InventoryScreen({
         <BagCell
           key={t.defId}
           icon={t.icon}
+          art={treasureArt(t.icon)}
           quality={t.quality}
           corner={`Lv.${t.level}`}
           badge={t.tier > 0 ? `${t.tier}阶` : undefined}
@@ -355,6 +356,7 @@ export function InventoryScreen({
         <BagCell
           key={p.id}
           icon={p.icon}
+          art={pillArt(p.quality)}
           quality={p.quality}
           badge={`×${formatNumber(p.count)}`}
           label={`${p.name} ×${p.count}`}

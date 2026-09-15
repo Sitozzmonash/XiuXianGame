@@ -533,6 +533,8 @@ export interface Drop {
   count: number
   label: string
   icon?: string
+  /** 装备部位，用于展示真实立绘 */
+  slot?: EquipSlotId
 }
 
 export interface BattleReward {

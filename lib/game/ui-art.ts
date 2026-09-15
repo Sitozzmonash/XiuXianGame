@@ -92,3 +92,19 @@ const TREASURE_BY_ICON: Record<string, string> = {
 export function treasureArt(icon: string): string | undefined {
   return TREASURE_BY_ICON[icon]
 }
+
+/** 丹药水墨真彩立绘（按丹药品质归类为碧灵、紫霞、真阳金丹、赤霞九转神丹） */
+const PILL_BY_QUALITY: Record<string, string> = {
+  white: '/images/pills/pill-green.png',
+  green: '/images/pills/pill-green.png',
+  blue: '/images/pills/pill-green.png',
+  purple: '/images/pills/pill-purple.png',
+  orange: '/images/pills/pill-gold.png',
+  red: '/images/pills/pill-red.png',
+  rainbow: '/images/pills/pill-red.png',
+}
+
+export function pillArt(quality: string): string | undefined {
+  return PILL_BY_QUALITY[quality] ?? '/images/pills/pill-green.png'
+}
+

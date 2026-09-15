@@ -9,6 +9,7 @@ import { MATERIAL_BY_ID } from '@/lib/game/config/materials'
 import { QUALITY } from '@/lib/game/ui-tokens'
 import { QUALITY_ORDER } from '@/lib/game/types'
 import { useGameStore } from '@/lib/game/state/store'
+import { pillArt } from '@/lib/game/ui-art'
 import { formatNumber } from '@/lib/game/utils'
 import { ScreenFrame, SubHeader } from '../ScreenFrame'
 import { GameIcon } from '../GameIcon'
@@ -132,10 +133,17 @@ export function AlchemyScreen({ onBack }: { onBack: () => void }) {
                 >
                   <div className="flex items-start gap-2.5">
                     <span
-                      className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-gradient-to-b from-ink-800 to-ink-950"
+                      className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-gradient-to-b from-ink-800 to-ink-950"
                       style={{ boxShadow: `inset 0 0 0 1.5px ${q.ring}, 0 0 10px ${q.glow}` }}
                     >
                       <GameIcon name={pill?.icon ?? 'pill'} className="size-5 text-cream" />
+                      {pillArt(recipe.quality) && (
+                        <img
+                          src={pillArt(recipe.quality)}
+                          alt=""
+                          className="absolute inset-1 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                        />
+                      )}
                     </span>
 
                     <div className="min-w-0 flex-1">
@@ -240,10 +248,17 @@ export function AlchemyScreen({ onBack }: { onBack: () => void }) {
                       className="flex items-center gap-2.5 rounded-md border border-gold-300/15 bg-ink-950/60 px-3 py-2"
                     >
                       <span
-                        className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-gradient-to-b from-ink-800 to-ink-950"
+                        className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-gradient-to-b from-ink-800 to-ink-950"
                         style={{ boxShadow: `inset 0 0 0 1.5px ${q.ring}, 0 0 10px ${q.glow}` }}
                       >
                         <GameIcon name={def!.icon} className="size-5 text-cream" />
+                        {pillArt(def!.quality) && (
+                          <img
+                            src={pillArt(def!.quality)}
+                            alt=""
+                            className="absolute inset-1 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                          />
+                        )}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">

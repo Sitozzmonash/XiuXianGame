@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { TREASURE_BY_ID } from '@/lib/game/config/treasures'
 import { PET_BY_ID } from '@/lib/game/config/pets'
 import { qualityRank } from '@/lib/game/ui-tokens'
-import { monsterArt } from '@/lib/game/ui-art'
+import { equipArt, monsterArt, pillArt, treasureArt } from '@/lib/game/ui-art'
 import { skinArt } from '@/lib/game/config/skins'
 import { useGameStore } from '@/lib/game/state/store'
 import { playBattleEventSfx, playSfx } from '@/lib/game/audio'
@@ -341,14 +341,35 @@ const QUALITY_ICON: Record<string, string> = {
 }
 
 function dropsToView(drops: Drop[]): BattleDropView[] {
-  return drops.map((d, i) => ({
-    id: `${d.kind}-${d.id ?? i}`,
-    name: d.label,
-    quality: (d.quality ?? 'green') as Quality,
-    icon: d.icon ?? QUALITY_ICON[d.quality ?? 'green'] ?? 'gem',
-    detail: d.count > 1 ? `×${d.count}` : undefined,
-    kindLabel: d.kind === 'equipment' ? '装备' : undefined,
-  }))
+  return drops.map((d, i) => {
+    let art: string | undefined
+    let iconName = d.icon ?? QUALITY_ICON[d.quality ?? 'green'] ?? 'gem'
+
+    if (d.kind === 'equipment') {
+      // 装备优先从 d.slot 或 d.icon 取装备部位立绘，或兜底为 weapon
+      const slot = d.slot ?? (d.icon && ['weapon', 'robe', 'belt', 'crown', 'boots', 'bracer', 'necklace', 'ring', 'jade', 'seal'].includes(d.icon) ? d.icon : 'weapon')
+      art = equipArt(slot)
+      iconName = slot
+    } else if (d.kind === 'treasure') {
+      const tDef = d.id ? TREASURE_BY_ID[d.id] : undefined
+      const tIcon = tDef?.icon ?? d.icon ?? 'sword'
+      art = treasureArt(tIcon)
+      iconName = tIcon
+    } else if (d.kind === 'pill') {
+      art = pillArt(d.quality ?? 'green')
+      iconName = 'pill'
+    }
+
+    return {
+      id: `${d.kind}-${d.id ?? i}`,
+      name: d.label,
+      quality: (d.quality ?? 'green') as Quality,
+      icon: iconName,
+      art,
+      detail: d.count > 1 ? `×${d.count}` : undefined,
+      kindLabel: d.kind === 'equipment' ? '装备' : undefined,
+    }
+  })
 }
 
 function portraitForMonster(id: string, icon: string): string | undefined {

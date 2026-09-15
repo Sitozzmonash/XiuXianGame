@@ -697,7 +697,25 @@ export const useGameStore = create<GameStore>()(
             }
             const lb = materializeDrops(s, drops, rng)
             result.newItems = lb.equipment
-            result.drops = drops
+
+            // 将实例化出的具体装备名字与部位回填到结算展示的 drops 中，
+            // 避免结算弹窗只显示抽象的「装备」和默认宝石，而能展示真彩立绘与真实名称
+            let equipIndex = 0
+            const enrichedDrops = drops.map((d) => {
+              if (d.kind === 'equipment' && lb.equipment[equipIndex]) {
+                const eq = lb.equipment[equipIndex++]
+                return {
+                  ...d,
+                  id: eq.uid,
+                  label: eq.name,
+                  slot: eq.slot,
+                  icon: eq.icon,
+                  quality: eq.quality,
+                }
+              }
+              return d
+            })
+            result.drops = enrichedDrops
 
             // 法宝掉落：materializeDrops 不处理 treasure 类型，需在此发放入库并自动上阵
             for (const d of drops) {

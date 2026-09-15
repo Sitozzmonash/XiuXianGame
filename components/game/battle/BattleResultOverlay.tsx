@@ -18,6 +18,8 @@ export interface BattleDropView {
   name: string
   quality: Quality
   icon: string
+  /** 实体真彩图 */
+  art?: string
   /** 数量或说明 */
   detail?: string
   /** 法宝 / 功法 / 灵兽等非装备掉落 */
@@ -286,12 +288,19 @@ function DropCard({ drop, shown }: { drop: BattleDropView; shown: boolean }) {
       )}
 
       <span
-        className="relative flex size-9 items-center justify-center rounded-sm"
+        className="relative flex size-9 items-center justify-center overflow-hidden rounded-sm"
         style={{ background: 'rgba(7,9,8,0.7)', boxShadow: `inset 0 0 0 1px ${q.ring}` }}
       >
         <span style={{ color: q.text }}>
           <GameIcon name={drop.icon} className="size-4" />
         </span>
+        {drop.art && (
+          <img
+            src={drop.art}
+            alt=""
+            className="absolute inset-1 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]"
+          />
+        )}
       </span>
 
       <span
